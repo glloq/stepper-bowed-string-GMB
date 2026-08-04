@@ -3,16 +3,16 @@
 **Version:** 1.0
 **Status:** initial specification
 **Target platform:** ESP32-S3
-**Number of strings:** 1 to 6
+**Number of strings:** 1 to 4
 **Initial communication:** Wi-Fi
 **Configuration:** local Web interface
-**Instrument type:** plucked or strummed string instruments
+**Instrument type:** bowed string instruments (violin family), fretless
 
 ---
 
 # 1. Project purpose
 
-Stepper-Bowed-Strings-GMB is a modular MIDI controller intended for plucked or strummed string instruments.
+Stepper-Bowed-Strings-GMB is a modular MIDI controller intended for bowed string instruments (the violin family).
 
 The system must move a single mechanical finger along each string in order to select the note to play.
 
@@ -83,25 +83,26 @@ The mechanical logic of each project must nonetheless remain independent.
 
 The system must be adaptable to:
 
-* ukulele;
-* guitar;
-* bass;
-* mandolin;
-* banjo;
-* tenor guitar;
-* zither;
-* experimental plucked string instruments;
-* instruments using an individual pick;
-* instruments using a per-string strum.
+* violin;
+* viola;
+* cello;
+* double bass;
+* other four-or-fewer-string bowed instruments;
+* experimental bowed / friction-wheel string instruments.
+
+Each string is excited by a motorised friction wheel (the "bow") pressed onto it
+by a descent servo. The instruments are fretless: pitch positions are computed
+along the string.
 
 The project must not impose:
 
 * a specific tuning;
-* a fixed number of strings;
-* a fixed number of frets;
+* a fixed number of strings (up to the four-string maximum);
+* a fixed number of positions;
 * a single vibrating length;
 * a single transmission model;
 * a single type of servomotor;
+* a single H-bridge topology;
 * a fixed GPIO wiring.
 
 ---
@@ -110,16 +111,17 @@ The project must not impose:
 
 This version must not handle:
 
-* bowed string instruments;
-* linear bows;
-* bow wheels;
-* DC friction motors;
-* BLDC motors;
-* bow speed regulation;
+* plucked or strummed string instruments (that is the sibling Stepper-Plucked-Strings-GMB project);
+* linear (reciprocating) bows — only rotating friction wheels;
+* BLDC bow motors — only brushed DC motors driven through an H-bridge;
 * a matrix of fixed servomotor-driven fingers;
 * a matrix of fixed solenoid-driven fingers;
 * multiple movable fingers on the same string;
-* a stepper motor shared between several strings.
+* a stepper motor shared between several strings;
+* more than four strings — the ESP32-S3's eight LEDC channels bound the bow-motor PWM.
+
+The friction wheel, the DC bow motor, its H-bridge drive and the bow-speed /
+bow-pressure regulation are the **core** function of this project.
 
 ---
 
@@ -172,39 +174,38 @@ Once the carriage is positioned, the finger must be able to:
 
 The reference mechanism uses one servomotor per string.
 
-## 5.3 Setting the string in vibration
+## 5.3 Setting the string in vibration (bowing)
 
-Two modes must be provided.
+Each string is excited continuously by a motorised **friction wheel** — the
+"bow" — pressed onto it by a **descent servo**.
 
-### Individual pluck
+### Bow motor (friction wheel)
 
-Each string has its own pluck actuator.
+Each string has its own DC motor turning a friction wheel, driven through an
+**H-bridge**:
 
 ```text
-1 pluck servo per string
+1 DC friction-wheel motor per string, via an H-bridge
 ```
 
-This mode allows:
+The motor's PWM duty sets the **bow speed**. Two H-bridge topologies must be
+supported: `IN/IN` (two PWM inputs) and `PH/EN` (direction level + PWM). A shared
+enable line (`MOTOR_EN`, the drivers' `nSLEEP`/`STBY`) cuts every motor at once
+for safety.
 
-* simultaneous chords;
-* repeated notes;
-* individual tremolo;
-* individual velocity control;
-* precise triggering of each string.
+### Bow-press (descent) servo
 
-### Per-string strum
+Each string has a mandatory descent servo that lowers the wheel onto the string
+and sets the **bow pressure** (rest = lifted, contact = lightest touch, active =
+full pressure).
 
-Each string may use its own strum servo instead of an individual pluck.
+Together the bow speed and bow pressure must allow:
 
-It must allow:
-
-* upward strum;
-* downward strum;
-* adjustable speed;
-* return to rest position;
-* synchronization with the fingers.
-
-The same instrument may combine strings that pluck with strings that strum.
+* a continuously sustained note (bowed, not decaying);
+* per-string dynamic control (velocity attack + live CC modulation);
+* crescendo / diminuendo on a held note;
+* precise start (engage) and stop (lift) of each string;
+* optional direction reversal (bow change).
 
 ---
 
@@ -212,16 +213,17 @@ The same instrument may combine strings that pluck with strings that strum.
 
 | Resource                | Minimum |   Maximum |
 | ----------------------- | ------: | --------: |
-| Strings                 |       1 |         6 |
-| Stepper motors          |       1 |         6 |
-| Movable fingers         |       1 |         6 |
-| Reference sensors       |       1 |         6 |
-| Opposite endstops       |       0 |         6 |
-| Pressing servos         |       1 |         6 |
-| Pluck servos            |       0 |         6 |
+| Strings                 |       1 |         4 |
+| Stepper motors          |       1 |         4 |
+| Movable fingers         |       1 |         4 |
+| Reference sensors       |       1 |         4 |
+| Opposite endstops       |       0 |         4 |
+| Finger servos           |       1 |         4 |
+| Bow-press (descent) servos |    1 |         4 |
+| Bow motors (H-bridge)   |       1 |         4 |
+| Bow-motor PWM (LEDC) channels | 1 |         8 |
 | Auxiliary servos        |       0 |         4 |
-| Total servo outputs     |       1 |        16 |
-| Auxiliary power outputs |       0 |         8 |
+| Total servo outputs (PCA9685) | 1 |        16 |
 | Saved profiles          |       1 | 8 minimum |
 
 The following relationship must be preserved:
@@ -970,13 +972,16 @@ RELEASING_FINGER
 MOVING
 PRESSING_FINGER
 SETTLING
-READY_TO_PLUCK
-PLUCKING
-SUSTAINING
-DAMPING
+READY_TO_BOW
+BOWING          (continuous — the note sounds while the wheel turns)
+RELEASING_BOW   (lift the wheel + spin the motor down after Note Off)
 CANCELLING
 FAULT
 ```
+
+Bowing is a continuous excitation: a note sounds while the wheel is engaged and
+turning (`BOWING`) and stops when the wheel lifts (`RELEASING_BOW`). There is no
+separate damping state.
 
 No blocking `delay()` must be used during play.
 
@@ -986,7 +991,7 @@ If a command is cancelled or replaced, all deferred actions associated with its 
 
 This prevents:
 
-* a pluck after a Note Off;
+* a bow-start after a Note Off;
 * a delayed press;
 * the execution of an old position;
 * an attack after a panic.
@@ -1059,14 +1064,13 @@ The interface must allow:
 * chord grouping delay;
 * saturation strategy.
 
-## 18.1 Velocity
+## 18.1 Velocity and continuous dynamics
 
-Velocity may act on:
+Velocity sets the **attack** intensity of a bowed note, acting on:
 
-* pick travel;
-* pick speed;
-* attack delay;
-* pluck profile.
+* bow speed (the wheel's PWM duty);
+* bow pressure (the descent servo's position);
+* attack delay.
 
 Curves offered:
 
@@ -1077,6 +1081,12 @@ strong
 exponential
 custom
 ```
+
+Because a bowed note is excited continuously, its dynamics must also be shapeable
+**while it sounds** (`continuousDynamics`): CC7 (volume), CC11 (expression), CC1
+(modulation) and channel aftertouch re-evaluate the bow speed and pressure of
+every sounding string in real time — a bowed crescendo / diminuendo on a held
+note.
 
 ---
 
