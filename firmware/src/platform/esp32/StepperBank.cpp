@@ -1,0 +1,210 @@
+#include "StepperBank.h"
+
+#include <cmath>
+
+namespace gmb {
+
+#if defined(ARDUINO)
+
+void StepperBank::begin(const std::vector<AxisConfig>& axes,
+                        const std::vector<AxisPins>& pins, int8_t enablePin,
+                        const std::vector<bool>& homeActiveHigh,
+                        const std::vector<bool>& limitActiveHigh) {
+    axes_.clear();
+    steppers_.clear();
+    enablePin_ = enablePin;
+    attachFault_ = false;
+    engine_.init();
+
+    for (size_t i = 0; i < axes.size(); ++i) {
+        AxisRt rt(axes[i]);
+        rt.pins = i < pins.size() ? pins[i] : AxisPins{};
+        rt.stepsPerMm = rt.geom.stepsPerMm();
+        rt.homeActiveHigh = i < homeActiveHigh.size() ? homeActiveHigh[i] : false;
+        rt.limitActiveHigh = i < limitActiveHigh.size() ? limitActiveHigh[i] : false;
+        rt.homeDeb.configure(3, false);   // 3 ms contact debounce
+        rt.limitDeb.configure(3, false);
+
+        // A disabled axis is never attached and never faults the bank: it may
+        // legitimately carry no STEP/DIR/HOME pins at all.
+        if (!axes[i].enabled) {
+            rt.attachFault = false;
+            axes_.push_back(rt);
+            steppers_.push_back(nullptr);
+            continue;
+        }
+
+        FastAccelStepper* s = nullptr;
+        if (rt.pins.step >= 0) {
+            s = engine_.stepperConnectToPin(rt.pins.step);
+        }
+        if (s != nullptr) {
+            // Second arg = "dir HIGH counts position up"; flip it when inverted.
+            if (rt.pins.dir >= 0) s->setDirectionPin(rt.pins.dir, !axes[i].invertDirection);
+            s->setAutoEnable(false);
+            double sps = axes[i].maxSpeedMmS * rt.stepsPerMm;
+            double acc = axes[i].maxAccelMmS2 * rt.stepsPerMm;
+            s->setSpeedInHz(static_cast<uint32_t>(sps > 1 ? sps : 1));
+            s->setAcceleration(static_cast<uint32_t>(acc > 1 ? acc : 1));
+        } else {
+            rt.attachFault = true;  // no free RMT/MCPWM unit or STEP pin missing
+            attachFault_ = true;    // at least one ENABLED axis failed to attach
+        }
+        axes_.push_back(rt);
+        steppers_.push_back(s);
+
+        if (rt.pins.home >= 0) pinMode(rt.pins.home, INPUT_PULLUP);
+        if (rt.pins.limit >= 0) pinMode(rt.pins.limit, INPUT_PULLUP);
+    }
+    if (enablePin_ >= 0) pinMode(enablePin_, OUTPUT);
+    enableDrivers(false);
+}
+
+void StepperBank::enableDrivers(bool on) {
+    enabled_ = on;
+    if (enablePin_ >= 0) digitalWrite(enablePin_, on ? LOW : HIGH);  // active-low
+}
+
+void StepperBank::moveToMm(size_t axis, double mm) {
+    if (axis >= steppers_.size() || !steppers_[axis]) return;
+    double clamped = axes_[axis].geom.clampToLimits(mm);
+    axes_[axis].cmdTargetMm = clamped;
+    axes_[axis].hasTarget = true;
+    steppers_[axis]->moveTo(axes_[axis].geom.mmToSteps(clamped));
+}
+
+void StepperBank::moveToMmRaw(size_t axis, double mm) {
+    if (axis >= steppers_.size() || !steppers_[axis]) return;
+    axes_[axis].cmdTargetMm = mm;
+    axes_[axis].hasTarget = true;
+    steppers_[axis]->moveTo(axes_[axis].geom.mmToSteps(mm));
+}
+
+void StepperBank::setVelocityMm(size_t axis, double mmS) {
+    if (axis >= steppers_.size() || !steppers_[axis]) return;
+    axes_[axis].hasTarget = false;  // velocity cruise has no position target
+    double hz = std::fabs(mmS) * axes_[axis].stepsPerMm;
+    steppers_[axis]->setSpeedInHz(static_cast<uint32_t>(hz > 1 ? hz : 1));
+    if (mmS >= 0) steppers_[axis]->runForward();
+    else steppers_[axis]->runBackward();
+}
+
+void StepperBank::stop(size_t axis) {
+    if (axis < steppers_.size() && steppers_[axis]) steppers_[axis]->stopMove();
+}
+
+void StepperBank::emergencyStop(size_t axis) {
+    if (axis < steppers_.size() && steppers_[axis])
+        steppers_[axis]->forceStopAndNewPosition(steppers_[axis]->getCurrentPosition());
+}
+
+void StepperBank::stopAll() {
+    for (auto* s : steppers_)
+        if (s) s->forceStopAndNewPosition(s->getCurrentPosition());
+}
+
+void StepperBank::setPositionReference(size_t axis, double mm) {
+    if (axis >= steppers_.size() || !steppers_[axis]) return;
+    steppers_[axis]->setCurrentPosition(axes_[axis].geom.mmToSteps(mm));
+    // Restore the running speed after any homing-seek override.
+    double sps = axes_[axis].geom.config().maxSpeedMmS * axes_[axis].stepsPerMm;
+    steppers_[axis]->setSpeedInHz(static_cast<uint32_t>(sps > 1 ? sps : 1));
+}
+
+double StepperBank::positionMm(size_t axis) const {
+    if (axis >= steppers_.size() || !steppers_[axis]) return 0.0;
+    return axes_[axis].geom.stepsToMm(steppers_[axis]->getCurrentPosition());
+}
+
+bool StepperBank::atTarget(size_t axis) const {
+    if (axis >= steppers_.size() || !steppers_[axis]) return true;
+    return !steppers_[axis]->isRunning();
+}
+
+bool StepperBank::reachedTarget(size_t axis) const {
+    if (axis >= steppers_.size() || !steppers_[axis]) return true;
+    if (steppers_[axis]->isRunning()) return false;
+    if (!axes_[axis].hasTarget) return true;  // no position move commanded yet
+    static constexpr double kPosToleranceMm = 0.5;
+    return std::fabs(positionMm(axis) - axes_[axis].cmdTargetMm) <= kPosToleranceMm;
+}
+
+bool StepperBank::isRunning(size_t axis) const {
+    return axis < steppers_.size() && steppers_[axis] && steppers_[axis]->isRunning();
+}
+
+void StepperBank::updateSensors(uint32_t nowMs) {
+    for (auto& a : axes_) {
+        if (a.pins.home >= 0) a.homeDeb.update(nowMs, digitalRead(a.pins.home) == HIGH);
+        if (a.pins.limit >= 0) a.limitDeb.update(nowMs, digitalRead(a.pins.limit) == HIGH);
+    }
+}
+
+bool StepperBank::homeActive(size_t axis) const {
+    if (axis >= axes_.size() || axes_[axis].pins.home < 0) return false;
+    bool high = axes_[axis].homeDeb.state();  // debounced
+    return axes_[axis].homeActiveHigh ? high : !high;
+}
+
+bool StepperBank::homeRawHigh(size_t axis) const {
+    if (axis >= axes_.size() || axes_[axis].pins.home < 0) return false;
+    return axes_[axis].homeDeb.state();  // debounced raw HIGH
+}
+
+bool StepperBank::limitActive(size_t axis) const {
+    if (axis >= axes_.size() || axes_[axis].pins.limit < 0) return false;
+    bool high = axes_[axis].limitDeb.state();  // debounced, independent polarity
+    return axes_[axis].limitActiveHigh ? high : !high;
+}
+
+#else  // ---- non-Arduino stub (kept analysable off-target) ----
+
+void StepperBank::begin(const std::vector<AxisConfig>& axes,
+                        const std::vector<AxisPins>& pins, int8_t enablePin,
+                        const std::vector<bool>&, const std::vector<bool>&) {
+    axes_.clear();
+    enablePin_ = enablePin;
+    for (size_t i = 0; i < axes.size(); ++i) {
+        AxisRt rt(axes[i]);
+        rt.pins = i < pins.size() ? pins[i] : AxisPins{};
+        rt.stepsPerMm = rt.geom.stepsPerMm();
+        axes_.push_back(rt);
+    }
+}
+void StepperBank::updateSensors(uint32_t) {}
+void StepperBank::enableDrivers(bool on) { enabled_ = on; }
+void StepperBank::moveToMm(size_t axis, double mm) {
+    if (axis < axes_.size()) {
+        double clamped = axes_[axis].geom.clampToLimits(mm);
+        axes_[axis].cmdTargetMm = clamped;
+        axes_[axis].hasTarget = true;
+        axes_[axis].position = axes_[axis].geom.mmToSteps(clamped);
+    }
+}
+void StepperBank::moveToMmRaw(size_t axis, double mm) {
+    if (axis < axes_.size()) {
+        axes_[axis].cmdTargetMm = mm;
+        axes_[axis].hasTarget = true;
+        axes_[axis].position = axes_[axis].geom.mmToSteps(mm);
+    }
+}
+void StepperBank::setVelocityMm(size_t, double) {}
+void StepperBank::stop(size_t) {}
+void StepperBank::emergencyStop(size_t) {}
+void StepperBank::stopAll() {}
+void StepperBank::setPositionReference(size_t axis, double mm) {
+    if (axis < axes_.size()) axes_[axis].position = axes_[axis].geom.mmToSteps(mm);
+}
+double StepperBank::positionMm(size_t axis) const {
+    return axis < axes_.size() ? axes_[axis].geom.stepsToMm(axes_[axis].position) : 0.0;
+}
+bool StepperBank::atTarget(size_t) const { return true; }
+bool StepperBank::reachedTarget(size_t) const { return true; }
+bool StepperBank::isRunning(size_t) const { return false; }
+bool StepperBank::homeActive(size_t) const { return false; }
+bool StepperBank::homeRawHigh(size_t) const { return false; }
+bool StepperBank::limitActive(size_t) const { return false; }
+
+#endif
+
+}  // namespace gmb

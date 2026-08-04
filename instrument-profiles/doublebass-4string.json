@@ -1,0 +1,533 @@
+{
+  "project": "Stepper-Bowed-Strings-GMB",
+  "profileVersion": 1,
+  "capabilitiesRevision": 1,
+  "instrument": {
+    "name": "Double Bass",
+    "description": "Double bass E-A-D-G (fourths), fretless — one friction-wheel bow + descent servo per string.",
+    "stringCount": 4,
+    "type": "contrabass",
+    "gmProgram": 43,
+    "typeId": 5,
+    "subType": 3,
+    "fretless": true,
+    "capo": 0,
+    "transpose": 0
+  },
+  "board": {
+    "profile": "esp32-s3-devkitc-1",
+    "reserveUsb": true,
+    "automaticPinAssignment": true
+  },
+  "pins": [
+    {
+      "signal": "STEP1",
+      "gpio": 4,
+      "kind": "step"
+    },
+    {
+      "signal": "DIR1",
+      "gpio": 17,
+      "kind": "dir"
+    },
+    {
+      "signal": "HOME1",
+      "gpio": 12,
+      "kind": "home"
+    },
+    {
+      "signal": "BOWA1",
+      "gpio": 15,
+      "kind": "generic"
+    },
+    {
+      "signal": "BOWB1",
+      "gpio": 10,
+      "kind": "generic"
+    },
+    {
+      "signal": "STEP2",
+      "gpio": 5,
+      "kind": "step"
+    },
+    {
+      "signal": "DIR2",
+      "gpio": 18,
+      "kind": "dir"
+    },
+    {
+      "signal": "HOME2",
+      "gpio": 13,
+      "kind": "home"
+    },
+    {
+      "signal": "BOWA2",
+      "gpio": 16,
+      "kind": "generic"
+    },
+    {
+      "signal": "BOWB2",
+      "gpio": 11,
+      "kind": "generic"
+    },
+    {
+      "signal": "STEP3",
+      "gpio": 6,
+      "kind": "step"
+    },
+    {
+      "signal": "DIR3",
+      "gpio": 8,
+      "kind": "dir"
+    },
+    {
+      "signal": "HOME3",
+      "gpio": 14,
+      "kind": "home"
+    },
+    {
+      "signal": "BOWA3",
+      "gpio": 1,
+      "kind": "generic"
+    },
+    {
+      "signal": "BOWB3",
+      "gpio": 38,
+      "kind": "generic"
+    },
+    {
+      "signal": "STEP4",
+      "gpio": 7,
+      "kind": "step"
+    },
+    {
+      "signal": "DIR4",
+      "gpio": 9,
+      "kind": "dir"
+    },
+    {
+      "signal": "HOME4",
+      "gpio": 21,
+      "kind": "home"
+    },
+    {
+      "signal": "BOWA4",
+      "gpio": 2,
+      "kind": "generic"
+    },
+    {
+      "signal": "BOWB4",
+      "gpio": 39,
+      "kind": "generic"
+    },
+    {
+      "signal": "ENABLE",
+      "gpio": 42,
+      "kind": "enable"
+    },
+    {
+      "signal": "SDA",
+      "gpio": 40,
+      "kind": "i2cSda"
+    },
+    {
+      "signal": "SCL",
+      "gpio": 41,
+      "kind": "i2cScl"
+    },
+    {
+      "signal": "SERVO_OE",
+      "gpio": 47,
+      "kind": "servoOe"
+    },
+    {
+      "signal": "MOTOR_EN",
+      "gpio": 33,
+      "kind": "generic"
+    }
+  ],
+  "network": {
+    "mode": "accessPoint",
+    "ssid": "",
+    "hostname": "gmb-doublebass",
+    "apSsid": "Stepper-Bowed-Strings-GMB",
+    "staticIp": false
+  },
+  "midi": {
+    "globalChannel": 0,
+    "omni": false,
+    "transpose": 0,
+    "chordWindowMs": 3,
+    "sustainPedal": true,
+    "sustainCc": 64,
+    "velocityCurve": "linear",
+    "saturationStrategy": "priorityLow",
+    "continuousDynamics": true,
+    "noteExecutionDelayMs": 0,
+    "fingerLeadMs": 0,
+    "bowLeadMs": 0
+  },
+  "stringFretSelection": {
+    "enabled": true,
+    "mode": "hybrid",
+    "perMidiChannel": true,
+    "selectionTimeoutMs": 100,
+    "prepareOnCompleteSelection": true,
+    "queueDepth": 32,
+    "validation": {
+      "notePositionPolicy": "ccPriorityWithWarning",
+      "missingSelectionPolicy": "automaticAllocation",
+      "expiredSelectionPolicy": "automaticAllocation"
+    },
+    "string": {
+      "ccNumber": 20,
+      "minimum": 1,
+      "maximum": 4,
+      "offset": 0,
+      "numbering": "oneBased",
+      "reverseOrder": false,
+      "mapping": []
+    },
+    "fret": {
+      "ccNumber": 21,
+      "minimum": 0,
+      "maximum": 24,
+      "offset": 0,
+      "invalidValuePolicy": "automaticFallback"
+    }
+  },
+  "strings": [
+    {
+      "enabled": true,
+      "openNote": 28,
+      "maxFret": 24,
+      "scaleLengthMm": 1060,
+      "transmission": "beltGt2",
+      "stepsPerRevolution": 200,
+      "microsteps": 16,
+      "pulleyTeeth": 20,
+      "beltPitchMm": 2,
+      "leadPerRevolutionMm": 8,
+      "customStepsPerMm": 80,
+      "invertDirection": false,
+      "minPositionMm": 0,
+      "maxPositionMm": 820,
+      "fretOffsetMm": 0,
+      "maxSpeedMmS": 200,
+      "maxAccelMmS2": 2000,
+      "calibratedFretMm": [],
+      "homing": {
+        "direction": -1,
+        "fastSpeedMmS": 40,
+        "slowSpeedMmS": 5,
+        "backoffMm": 3,
+        "offsetMm": 0,
+        "timeoutMs": 8000,
+        "maxSearchMm": 860,
+        "sensorActiveHigh": true,
+        "limitActiveHigh": false
+      }
+    },
+    {
+      "enabled": true,
+      "openNote": 33,
+      "maxFret": 24,
+      "scaleLengthMm": 1060,
+      "transmission": "beltGt2",
+      "stepsPerRevolution": 200,
+      "microsteps": 16,
+      "pulleyTeeth": 20,
+      "beltPitchMm": 2,
+      "leadPerRevolutionMm": 8,
+      "customStepsPerMm": 80,
+      "invertDirection": false,
+      "minPositionMm": 0,
+      "maxPositionMm": 820,
+      "fretOffsetMm": 0,
+      "maxSpeedMmS": 200,
+      "maxAccelMmS2": 2000,
+      "calibratedFretMm": [],
+      "homing": {
+        "direction": -1,
+        "fastSpeedMmS": 40,
+        "slowSpeedMmS": 5,
+        "backoffMm": 3,
+        "offsetMm": 0,
+        "timeoutMs": 8000,
+        "maxSearchMm": 860,
+        "sensorActiveHigh": true,
+        "limitActiveHigh": false
+      }
+    },
+    {
+      "enabled": true,
+      "openNote": 38,
+      "maxFret": 24,
+      "scaleLengthMm": 1060,
+      "transmission": "beltGt2",
+      "stepsPerRevolution": 200,
+      "microsteps": 16,
+      "pulleyTeeth": 20,
+      "beltPitchMm": 2,
+      "leadPerRevolutionMm": 8,
+      "customStepsPerMm": 80,
+      "invertDirection": false,
+      "minPositionMm": 0,
+      "maxPositionMm": 820,
+      "fretOffsetMm": 0,
+      "maxSpeedMmS": 200,
+      "maxAccelMmS2": 2000,
+      "calibratedFretMm": [],
+      "homing": {
+        "direction": -1,
+        "fastSpeedMmS": 40,
+        "slowSpeedMmS": 5,
+        "backoffMm": 3,
+        "offsetMm": 0,
+        "timeoutMs": 8000,
+        "maxSearchMm": 860,
+        "sensorActiveHigh": true,
+        "limitActiveHigh": false
+      }
+    },
+    {
+      "enabled": true,
+      "openNote": 43,
+      "maxFret": 24,
+      "scaleLengthMm": 1060,
+      "transmission": "beltGt2",
+      "stepsPerRevolution": 200,
+      "microsteps": 16,
+      "pulleyTeeth": 20,
+      "beltPitchMm": 2,
+      "leadPerRevolutionMm": 8,
+      "customStepsPerMm": 80,
+      "invertDirection": false,
+      "minPositionMm": 0,
+      "maxPositionMm": 820,
+      "fretOffsetMm": 0,
+      "maxSpeedMmS": 200,
+      "maxAccelMmS2": 2000,
+      "calibratedFretMm": [],
+      "homing": {
+        "direction": -1,
+        "fastSpeedMmS": 40,
+        "slowSpeedMmS": 5,
+        "backoffMm": 3,
+        "offsetMm": 0,
+        "timeoutMs": 8000,
+        "maxSearchMm": 860,
+        "sensorActiveHigh": true,
+        "limitActiveHigh": false
+      }
+    }
+  ],
+  "servos": [
+    {
+      "enabled": true,
+      "function": "finger",
+      "stringIndex": 0,
+      "source": "pca",
+      "pcaBoard": 0,
+      "channel": 0,
+      "gpio": -1,
+      "pulseMinUs": 500,
+      "pulseMaxUs": 2500,
+      "restUs": 1000,
+      "activeUs": 1800,
+      "contactUs": 1400,
+      "inverted": false,
+      "travelMs": 120,
+      "settleMs": 30,
+      "disableAtRest": true,
+      "engageDelayMs": 0
+    },
+    {
+      "enabled": true,
+      "function": "bowPress",
+      "stringIndex": 0,
+      "source": "pca",
+      "pcaBoard": 0,
+      "channel": 4,
+      "gpio": -1,
+      "pulseMinUs": 500,
+      "pulseMaxUs": 2500,
+      "restUs": 1000,
+      "activeUs": 1900,
+      "contactUs": 1400,
+      "inverted": false,
+      "travelMs": 80,
+      "settleMs": 20,
+      "disableAtRest": true,
+      "engageDelayMs": 0
+    },
+    {
+      "enabled": true,
+      "function": "finger",
+      "stringIndex": 1,
+      "source": "pca",
+      "pcaBoard": 0,
+      "channel": 1,
+      "gpio": -1,
+      "pulseMinUs": 500,
+      "pulseMaxUs": 2500,
+      "restUs": 1000,
+      "activeUs": 1800,
+      "contactUs": 1400,
+      "inverted": false,
+      "travelMs": 120,
+      "settleMs": 30,
+      "disableAtRest": true,
+      "engageDelayMs": 0
+    },
+    {
+      "enabled": true,
+      "function": "bowPress",
+      "stringIndex": 1,
+      "source": "pca",
+      "pcaBoard": 0,
+      "channel": 5,
+      "gpio": -1,
+      "pulseMinUs": 500,
+      "pulseMaxUs": 2500,
+      "restUs": 1000,
+      "activeUs": 1900,
+      "contactUs": 1400,
+      "inverted": false,
+      "travelMs": 80,
+      "settleMs": 20,
+      "disableAtRest": true,
+      "engageDelayMs": 0
+    },
+    {
+      "enabled": true,
+      "function": "finger",
+      "stringIndex": 2,
+      "source": "pca",
+      "pcaBoard": 0,
+      "channel": 2,
+      "gpio": -1,
+      "pulseMinUs": 500,
+      "pulseMaxUs": 2500,
+      "restUs": 1000,
+      "activeUs": 1800,
+      "contactUs": 1400,
+      "inverted": false,
+      "travelMs": 120,
+      "settleMs": 30,
+      "disableAtRest": true,
+      "engageDelayMs": 0
+    },
+    {
+      "enabled": true,
+      "function": "bowPress",
+      "stringIndex": 2,
+      "source": "pca",
+      "pcaBoard": 0,
+      "channel": 6,
+      "gpio": -1,
+      "pulseMinUs": 500,
+      "pulseMaxUs": 2500,
+      "restUs": 1000,
+      "activeUs": 1900,
+      "contactUs": 1400,
+      "inverted": false,
+      "travelMs": 80,
+      "settleMs": 20,
+      "disableAtRest": true,
+      "engageDelayMs": 0
+    },
+    {
+      "enabled": true,
+      "function": "finger",
+      "stringIndex": 3,
+      "source": "pca",
+      "pcaBoard": 0,
+      "channel": 3,
+      "gpio": -1,
+      "pulseMinUs": 500,
+      "pulseMaxUs": 2500,
+      "restUs": 1000,
+      "activeUs": 1800,
+      "contactUs": 1400,
+      "inverted": false,
+      "travelMs": 120,
+      "settleMs": 30,
+      "disableAtRest": true,
+      "engageDelayMs": 0
+    },
+    {
+      "enabled": true,
+      "function": "bowPress",
+      "stringIndex": 3,
+      "source": "pca",
+      "pcaBoard": 0,
+      "channel": 7,
+      "gpio": -1,
+      "pulseMinUs": 500,
+      "pulseMaxUs": 2500,
+      "restUs": 1000,
+      "activeUs": 1900,
+      "contactUs": 1400,
+      "inverted": false,
+      "travelMs": 80,
+      "settleMs": 20,
+      "disableAtRest": true,
+      "engageDelayMs": 0
+    }
+  ],
+  "bowMotors": [
+    {
+      "enabled": true,
+      "stringIndex": 0,
+      "driveMode": "inIn",
+      "pwmFreqHz": 20000,
+      "pwmResolutionBits": 10,
+      "minDutyPercent": 25,
+      "maxDutyPercent": 100,
+      "reverse": false,
+      "brakeOnStop": false,
+      "spinUpMs": 40,
+      "spinDownMs": 60
+    },
+    {
+      "enabled": true,
+      "stringIndex": 1,
+      "driveMode": "inIn",
+      "pwmFreqHz": 20000,
+      "pwmResolutionBits": 10,
+      "minDutyPercent": 25,
+      "maxDutyPercent": 100,
+      "reverse": false,
+      "brakeOnStop": false,
+      "spinUpMs": 40,
+      "spinDownMs": 60
+    },
+    {
+      "enabled": true,
+      "stringIndex": 2,
+      "driveMode": "inIn",
+      "pwmFreqHz": 20000,
+      "pwmResolutionBits": 10,
+      "minDutyPercent": 25,
+      "maxDutyPercent": 100,
+      "reverse": false,
+      "brakeOnStop": false,
+      "spinUpMs": 40,
+      "spinDownMs": 60
+    },
+    {
+      "enabled": true,
+      "stringIndex": 3,
+      "driveMode": "inIn",
+      "pwmFreqHz": 20000,
+      "pwmResolutionBits": 10,
+      "minDutyPercent": 25,
+      "maxDutyPercent": 100,
+      "reverse": false,
+      "brakeOnStop": false,
+      "spinUpMs": 40,
+      "spinDownMs": 60
+    }
+  ]
+}
