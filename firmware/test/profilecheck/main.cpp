@@ -36,11 +36,10 @@ static bool parse(const std::string& json, Profile& out) {
 
 int main(int argc, char** argv) {
     const char* files[] = {
-        "instrument-profiles/ukulele-gcea.json",
-        "instrument-profiles/guitar-standard.json",
-        "instrument-profiles/bass-4string.json",
-        "instrument-profiles/mandolin-gdae.json",
-        "instrument-profiles/banjo-5string.json",
+        "instrument-profiles/violin-4string.json",
+        "instrument-profiles/viola-4string.json",
+        "instrument-profiles/cello-4string.json",
+        "instrument-profiles/doublebass-4string.json",
     };
     std::string root = argc > 1 ? argv[1] : ".";
     for (const char* rel : files) {
@@ -74,7 +73,7 @@ int main(int argc, char** argv) {
     // An unknown enum string must be REJECTED, not silently defaulted.
     {
         std::printf("unknown-enum rejection\n");
-        std::string base = slurp(root + "/instrument-profiles/ukulele-gcea.json");
+        std::string base = slurp(root + "/instrument-profiles/violin-4string.json");
         JsonDocument doc;
         deserializeJson(doc, base);
         doc["midi"]["velocityCurve"] = "banana";

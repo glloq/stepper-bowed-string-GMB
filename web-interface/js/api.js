@@ -1,5 +1,5 @@
 /*
- * api.js — REST + WebSocket client for the Stepper-Plucked-Strings-GMB
+ * api.js — REST + WebSocket client for the Stepper-Bowed-Strings-GMB
  * web interface, with a self-contained MOCK mode.
  *
  * The page is served from the ESP32 over LittleFS, so this file talks to the
