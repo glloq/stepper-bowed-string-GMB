@@ -223,7 +223,7 @@ TEST(controller_cc7_cc11_scale_attack) {
     double full = ic.target(2).intensity;
     CHECK(full > 0.0);
     ic.handleEvent(noteOff(0, 69), 100);
-    // Halve the volume: the next pluck should attack softer.
+    // Halve the volume: the next bow should attack softer.
     ic.handleEvent(cc(0, 7, 64), 200);
     ic.handleEvent(cc(0, 20, 3), 300);
     ic.handleEvent(cc(0, 21, 5), 300);

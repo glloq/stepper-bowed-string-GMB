@@ -80,6 +80,12 @@ Debouncer g_estopDeb;  // debounced E-stop input (avoids a spurious trip)
 struct TestNoteOff { uint8_t channel; uint8_t note; uint32_t atMs; };
 std::vector<TestNoteOff> g_testOffs;
 
+// Auto-stop timers for the bow-motor bring-up test (/api/test/motor). A spinning
+// friction wheel must never be left running if the operator walks away, so each
+// test spins the wheel only for a bounded window unless re-triggered or stopped.
+std::vector<uint32_t> g_motorTestStopAtMs;  // per motor, 0 = no pending auto-stop
+constexpr uint32_t kMotorTestMaxMs = 8000;
+
 // Per-string non-blocking playback scheduler.
 struct StringSched {
     enum Phase { Idle, WaitStopped, ReleasingFinger, MovingToFret, PressingFinger,
@@ -88,7 +94,7 @@ struct StringSched {
     uint32_t phaseStartMs = 0;
     uint32_t commandId = 0;
     int fingerIndex = -1;
-    uint32_t dampUntilMs = 0;   // don't move until the bow wheel has lifted (replace)
+    uint32_t dampUntilMs = 0;   // don't move until the bow wheel has lifted off
     uint32_t moveDeadlineMs = 0;  // fault the axis if the move isn't done by then
     int bowIndex = -1;          // this string's bow-press (descent) servo (-1 = none)
     int motorIndex = -1;        // this string's bow motor in g_bow (-1 = none)
@@ -287,6 +293,7 @@ void applyProfile() {
     int8_t motorEnPin = -1;
     buildBowPins(bowPinsA, bowPinsB, motorEnPin);
     g_bow.begin(g_profile.bowMotors, bowPinsA, bowPinsB, motorEnPin);
+    g_motorTestStopAtMs.assign(g_profile.bowMotors.size(), 0);
 
     g_homing.assign(g_profile.strings.size(), HomingController{});
     g_anchored.assign(g_profile.strings.size(), false);
@@ -548,6 +555,7 @@ void neutraliseAll() {
     g_servos.neutraliseAll();
     g_bow.neutraliseAll();   // stop every friction wheel + cut the H-bridge enable
     for (auto& s : g_sched) s = StringSched{};
+    std::fill(g_motorTestStopAtMs.begin(), g_motorTestStopAtMs.end(), 0u);
     g_testOffs.clear();  // drop scheduled test Note Offs so a stale one can't stop
                          // a future note with the same channel/number (audit P1-4)
     // A panic / E-stop supersedes any deferred profile activation.
@@ -666,14 +674,22 @@ bool doTestServo(int index, bool active) {
 // bring-up (wiring, rotation direction, rosin grip). Only when actuators are
 // armed and for a real, enabled motor. duty 0 stops it; the web UI is responsible
 // for sending the stop (matching the persistent nature of the servo test).
-bool doTestMotor(int index, double duty, bool forward) {
+bool doTestMotor(int index, double duty, bool forward, uint32_t nowMs) {
     if (!g_safety.actuatorsAllowed()) return false;
     if (!g_bow.commandable(index)) return false;
     if (duty < 0.0) duty = 0.0;
     if (duty > 1.0) duty = 1.0;
     g_bow.enableAll(true);
-    if (duty <= 0.0) g_bow.stop(index);
-    else g_bow.setSpeed(index, duty, forward);
+    if (duty <= 0.0) {
+        g_bow.stop(index);
+        if (index < static_cast<int>(g_motorTestStopAtMs.size())) g_motorTestStopAtMs[index] = 0;
+    } else {
+        g_bow.setSpeed(index, duty, forward);
+        // Bound the run so a forgotten test can't spin forever; re-triggering
+        // simply extends the window.
+        if (index < static_cast<int>(g_motorTestStopAtMs.size()))
+            g_motorTestStopAtMs[index] = nowMs + kMotorTestMaxMs;
+    }
     return true;
 }
 
@@ -744,7 +760,7 @@ void drainCommands(uint32_t nowMs) {
                 ok = doTestServo(c->servoIndex, c->servoActive);
                 break;
             case CmdType::TestMotor:
-                ok = doTestMotor(c->motorIndex, c->motorDuty, c->motorForward);
+                ok = doTestMotor(c->motorIndex, c->motorDuty, c->motorForward, nowMs);
                 break;
             case CmdType::Jog:
                 ok = doJog(c->axisIndex, c->jogDeltaMm, nowMs);
@@ -861,9 +877,10 @@ void tickString(size_t i, uint32_t nowMs) {
 
     switch (sch.phase) {
         case StringSched::ReleasingFinger:
-            // Start moving only once the finger has lifted, the damper (if any) has
-            // acted, AND the carriage has fully stopped (a new note arriving during
-            // a cancel deceleration must not issue a moveTo into a moving motor).
+            // Start moving only once the finger has lifted, the bow wheel has
+            // travelled back up, AND the carriage has fully stopped (a new note
+            // arriving during a cancel deceleration must not issue a moveTo into a
+            // moving motor, nor drag a still-lowered wheel across the string).
             if ((sch.fingerIndex < 0 ||
                  nowMs - sch.phaseStartMs >= g_servos.travelMs(sch.fingerIndex)) &&
                 static_cast<int32_t>(nowMs - sch.dampUntilMs) >= 0 &&
@@ -1236,6 +1253,14 @@ void loop() {
     g_instrument.tick(nowUs);   // flush chord groups
     g_servos.update(nowMs);     // scheduled servo returns / rest cut-off
     g_bow.update(nowMs);        // ramp each friction wheel toward its target speed
+    // Auto-stop any bow-motor bring-up test whose bounded window has elapsed.
+    for (size_t k = 0; k < g_motorTestStopAtMs.size(); ++k) {
+        if (g_motorTestStopAtMs[k] != 0 &&
+            static_cast<int32_t>(nowMs - g_motorTestStopAtMs[k]) >= 0) {
+            g_bow.stop(static_cast<int>(k));
+            g_motorTestStopAtMs[k] = 0;
+        }
+    }
 
     // Runtime PCA9685 health: a board lost AFTER arming (unplugged / brown-out)
     // means no finger/bow-press can act — panic rather than keep "playing" blind.

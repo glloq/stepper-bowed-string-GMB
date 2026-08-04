@@ -41,7 +41,7 @@ of detailed parameters, JSON import/export.
 | 9 | **Validation** | "Valid configuration" or a precise list of problems; no actuator is enabled until the critical errors are fixed |
 
 The per-string steps (4–7) show **one string at a time** via a string-tab strip,
-so a 6-string instrument stays navigable. General MIDI parameters (sustain CC,
+so a 4-string instrument stays uncluttered. General MIDI parameters (sustain CC,
 chord **saturation strategy**, velocity curve…) and a **Playback timing** card
 (fixed note-execution delay, finger lead, bow lead) live on the **MIDI** page.
 
@@ -142,9 +142,9 @@ restore, set the startup profile. **JSON** exchange format:
 {
   "project": "Stepper-Bowed-Strings-GMB",
   "profileVersion": 1,
-  "instrument": { "name": "Ukulele 4 strings", "stringCount": 4 },
+  "instrument": { "name": "Violin 4 strings", "stringCount": 4 },
   "board": { "profile": "esp32-s3-devkitc-1", "reserveUsb": true, "automaticPinAssignment": true },
-  "network": { "mode": "station", "hostname": "gmb-ukulele" },
+  "network": { "mode": "station", "hostname": "gmb-violin" },
   "strings": []
 }
 ```

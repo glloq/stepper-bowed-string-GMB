@@ -46,7 +46,7 @@ public:
     }
 
     // Software panic (spec 21.3): the caller must flush the MIDI
-    // queue, cancel motion/plucks, lift fingers, neutralise servos, disable
+    // queue, cancel motion/bowing, lift fingers, neutralise servos, disable
     // motors; this records the cause and latches the state.
     void panic(const std::string& cause, uint32_t nowMs);
 

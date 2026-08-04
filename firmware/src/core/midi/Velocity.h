@@ -1,6 +1,6 @@
 // MIDI velocity shaping (spec §18.1). Maps a 1..127 velocity to a
 // 0..1 intensity through the configured curve; the mechanical layer uses the
-// intensity for plectrum depth / attack.
+// intensity for the bow attack (wheel speed + descent-servo pressure).
 #pragma once
 
 #include <cmath>

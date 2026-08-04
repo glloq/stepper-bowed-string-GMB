@@ -29,7 +29,7 @@
         GMB.field('Enable GMB detection', GMB.input(adv, 'detectionEnabled', { type: 'checkbox' })),
         GMB.field('Instrument name', GMB.input(p.instrument, 'name', { onChange: function () { GMB.render(); } })),
         GMB.field('Instrument type', GMB.input(p.instrument, 'type', {
-          type: 'select', options: ['ukulele', 'guitar', 'bass', 'mandolin', 'banjo', 'custom'] })),
+          type: 'select', options: ['violin', 'viola', 'cello', 'contrabass', 'custom'] })),
         GMB.field('GM program', GMB.input(p.instrument, 'gmProgram', { type: 'number', min: 0, max: 127, onChange: function () { GMB.render(); } })),
         GMB.field('MIDI channel (1–16)', GMB.input(p.midi, 'globalChannel', { type: 'number', min: 0, max: 15 }), 'stored zero-based')
       ]),

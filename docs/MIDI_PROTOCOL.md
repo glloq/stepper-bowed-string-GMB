@@ -340,7 +340,7 @@ Request: `F0 7D 00 05 00 F7`. Response:
 F0 7D 00 05 01 01 01 <channel> <gm_program> <type_id> F7
 ```
 
-Nylon guitar example (GM 24 = `0x18`, type `0x04`): `F0 7D 00 05 01 01 01 01 18 04 F7`.
+Violin example (GM 40 = `0x28`, type `0x05`): `F0 7D 00 05 01 01 01 01 28 05 F7`.
 
 ### 3.5 Block 6 — Capabilities
 

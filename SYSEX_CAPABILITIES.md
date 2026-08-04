@@ -184,18 +184,18 @@ F0 7D 00 05 01
 F7
 ```
 
-Example for a guitar on internal MIDI channel 1, corresponding to user channel 2:
+Example for a violin on internal MIDI channel 1, corresponding to user channel 2:
 
 ```text
-F0 7D 00 05 01 01 01 01 18 04 F7
+F0 7D 00 05 01 01 01 01 28 05 F7
 ```
 
 With:
 
 ```text
 internal MIDI channel = 1
-GM program            = 24, nylon guitar
-type                  = 0x04, guitar
+GM program            = 40, violin
+type                  = 0x05, bowed string
 ```
 
 ---
@@ -305,11 +305,10 @@ Examples:
 ```text
 4 strings each with their own bow → maximum polyphony 4
 
-4 strings, per-string bowing
-but independent sustain              → maximum polyphony 6
+3 strings equipped with a bow motor   → maximum polyphony 3
 
-6 strings with mechanical constraints
-limiting play to 4 strings           → polyphony configured to 4
+4 strings but mechanical constraints
+limiting play to 2 at once            → polyphony configured to 2
 ```
 
 The setting must offer:
@@ -820,10 +819,10 @@ Response:
 F0 7D 00 06 01 ...
 
 Channel     : 1
-Type        : guitar
-Range       : E2 to E5
+Type        : violin
+Range       : G3 to E7
 Polyphony   : 4
-CC          : 7, 11, 20, 21, 64, 120, 123
+CC          : 1, 7, 11, 20, 21, 64, 120, 123
 Result      : valid
 ```
 

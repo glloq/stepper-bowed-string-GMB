@@ -44,7 +44,7 @@ access-point mode (default SSID `Stepper-Bowed-Strings-GMB`).
 
 Every REST call tries `fetch()` first and, if it fails (no backend — e.g. you
 opened `index.html` directly), transparently falls back to an in-memory mock
-with realistic sample data: a **4-string GCEA ukulele**. The WebSocket streams
+with realistic sample data: a **4-string GDAE violin**. The WebSocket streams
 fall back to timed mock pumps that emit a plausible GMB tablature sequence and
 live status jitter. A pulsing **DEMO / MOCK DATA** badge appears in the top bar
 whenever mock data is in use.

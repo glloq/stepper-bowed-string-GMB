@@ -670,6 +670,8 @@
       GMB.field('Max duty (%)', GMB.input(m, 'maxDutyPercent', { type: 'number', min: 0, max: 100 })),
       GMB.field('PWM frequency (Hz)', GMB.input(m, 'pwmFreqHz', { type: 'number', min: 100 }),
         '20 kHz is inaudible; count 1 or 2 LEDC channels per motor.'),
+      GMB.field('PWM resolution (bits)', GMB.input(m, 'pwmResolutionBits', { type: 'number', min: 8, max: 14 }),
+        'LEDC duty resolution — frequency × 2^bits must stay ≤ 80 MHz.'),
       GMB.field('Reverse direction', GMB.input(m, 'reverse', { type: 'checkbox' })),
       GMB.field('Brake on stop', GMB.input(m, 'brakeOnStop', { type: 'checkbox' }),
         'Short the motor to brake (vs coast) when a note ends.'),
@@ -777,8 +779,8 @@
 
   // ---- Step 7: Notes / fret position editor --------------------------------
   function stepNotes(body) {
-    body.appendChild(h('h3', 'Fret positions per string'));
-    body.appendChild(h('p.muted', 'Auto-fill the theoretical positions, then fine-tune any fret by hand. Move the axis to the real fret and use “Capture position” to record the live motor position. A calibrated value always overrides theory in the firmware.'));
+    body.appendChild(h('h3', 'Note positions per string'));
+    body.appendChild(h('p.muted', 'Bowed strings are fretless: each row is an equal-tempered semitone position along the string. Auto-fill the theoretical positions, then fine-tune any position by hand. Move the axis to the real position and use “Capture position” to record the live motor position. A calibrated value always overrides theory in the firmware.'));
     body.appendChild(stringTabs());
     var i = activeStr, s = GMB.state.profile.strings[i];
     if (!s) return;
@@ -791,8 +793,8 @@
         h('span.pill.mini', GMB.noteName(s.openNote)),
         h('span.motor-pos', { id: 'motor-pos-live' }, 'Motor: ' + mp.toFixed(2) + ' mm')]),
       h('div.form-grid', [
-        GMB.field('Fret offset from FDC (mm)', GMB.input(s, 'fretOffsetMm', { type: 'number', step: '0.1', onChange: function () { drawStep(); } }),
-          'Distance from the HOME endstop (FDC) to fret 0 (the nut). Shifts every fret of this string.')
+        GMB.field('Nut offset from FDC (mm)', GMB.input(s, 'fretOffsetMm', { type: 'number', step: '0.1', onChange: function () { drawStep(); } }),
+          'Distance from the HOME endstop (FDC) to position 0 (the nut). Shifts every position of this string.')
       ]),
       h('div.toolbar.wrap', [
         GMB.button('Auto-fill (theoretical)', function () { autoFill(s); }, 'primary'),
@@ -824,7 +826,7 @@
     var rows = [];
     for (var f = 0; f <= s.maxFret; f++) rows.push(fretRow(s, i, f));
     return h('div.table-wrap', h('table.mini-table.fret-editor', [
-      h('thead', h('tr', [h('th', 'Fret'), h('th', 'Note'), h('th', 'Theory mm (nut)'), h('th', 'Calibrated mm (nut)'), h('th', 'Abs (FDC) mm'), h('th', 'Move / save')])),
+      h('thead', h('tr', [h('th', 'Pos'), h('th', 'Note'), h('th', 'Theory mm (nut)'), h('th', 'Calibrated mm (nut)'), h('th', 'Abs (FDC) mm'), h('th', 'Move / save')])),
       h('tbody', rows)
     ]));
   }

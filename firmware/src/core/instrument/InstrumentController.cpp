@@ -114,7 +114,7 @@ void InstrumentController::prepareString(int stringIndex, int fret, uint32_t exp
         allocator_.runtime()[stringIndex].currentFret = fret;
     }
     StringTarget& t = targets_[stringIndex];
-    t.active = true;  // drive the carriage/finger now; the pluck stays disarmed
+    t.active = true;  // drive the carriage/finger now; the bow stays disarmed
     t.fret = fret;
     t.positionMm = axes_[stringIndex].fretPositionMm(fret);
     t.commandId = id;
@@ -138,7 +138,7 @@ bool InstrumentController::triggerPreparedNote(int stringIndex, int fret,
         return false;
     }
     // Keep the prepared move/command; only attach velocity and the Note mapping
-    // so the deferred pluck fires with the right intensity.
+    // so the deferred bow stroke starts with the right intensity.
     removeActiveByString(stringIndex);
     StringTarget& t = targets_[stringIndex];
     t.active = true;
@@ -237,7 +237,7 @@ void InstrumentController::handleEvent(const MidiEvent& e, uint32_t nowUs) {
         }
         selector_.onControlChange(e);
         // Pre-position any string whose CC selection just became complete, so the
-        // matching Note On only needs to arm the pluck (prepareOnCompleteSelection).
+        // matching Note On only needs to arm the bow (prepareOnCompleteSelection).
         for (const auto& c : selector_.takeJustCompleted())
             prepareString(c.stringIndex, c.fret, c.expiresAtUs);
         return;
@@ -256,7 +256,7 @@ void InstrumentController::handleEvent(const MidiEvent& e, uint32_t nowUs) {
             strings_[r.stringIndex].state() != StringState::Disabled;
         if (r.source == ResolveSource::Explicit && explicitPlayable) {
             // Reuse the anticipated move if this string was prepared for this fret;
-            // otherwise start a fresh note. Each string is plucked on its own.
+            // otherwise start a fresh note. Each string is bowed on its own.
             if (!triggerPreparedNote(r.stringIndex, r.fret, e.channel, e.data1,
                                      e.data2))
                 startNote(r.stringIndex, r.fret, e.channel, e.data1, e.data2);

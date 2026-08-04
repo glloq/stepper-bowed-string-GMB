@@ -24,7 +24,8 @@ CORE_SRC := \
   $(CORE)/configuration/ProfileValidator.cpp \
   $(CORE)/gmb/Capabilities.cpp \
   $(CORE)/gmb/GmbSysEx.cpp \
-  $(CORE)/safety/SafetyManager.cpp
+  $(CORE)/safety/SafetyManager.cpp \
+  $(ROOT)/src/platform/esp32/BowMotorBank.cpp
 
 TEST_SRC := \
   test_main.cpp \
@@ -40,7 +41,8 @@ TEST_SRC := \
   test_servos.cpp \
   test_planner.cpp \
   test_audit.cpp \
-  test_debounce.cpp
+  test_debounce.cpp \
+  test_bowmotor.cpp
 
 BIN := run_tests
 

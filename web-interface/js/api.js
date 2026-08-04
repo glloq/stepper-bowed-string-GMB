@@ -6,7 +6,7 @@
  * firmware REST API (see endpoint list in README.md). When no backend is
  * reachable — typically when index.html is opened directly from disk — every
  * call transparently falls back to an in-memory mock so the whole UI stays
- * usable standalone with realistic sample data (a 4-string GCEA ukulele).
+ * usable standalone with realistic sample data (a 4-string GDAE violin).
  *
  * Everything is exposed on the global GMB namespace; no ES modules / no build
  * step, so it works from file:// where module imports would be blocked.
@@ -408,8 +408,8 @@
     profile: sampleProfile(),
     slots: [
       sampleProfile(),
-      demoProfile('Guitar Standard', 'guitar'),
-      demoProfile('Bass EADG', 'bass'),
+      demoProfile('Viola', 'viola'),
+      demoProfile('Cello', 'cello'),
       null, null, null, null, null
     ],
     startupSlot: 0

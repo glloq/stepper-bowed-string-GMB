@@ -111,7 +111,7 @@ private:
 
     // Anticipated pre-positioning (prepareOnCompleteSelection): moves + presses a
     // string on a complete CC selection so the Note On only needs to arm the
-    // pluck. Empty vectors / 0 command id mean "no prepared note on this string".
+    // bow. Empty vectors / 0 command id mean "no prepared note on this string".
     std::vector<int> preparedFret_;        // per string, -1 = none
     std::vector<uint32_t> preparedId_;     // per string, 0 = none
     std::vector<uint32_t> preparedExpiryUs_; // per string, when the prepare expires

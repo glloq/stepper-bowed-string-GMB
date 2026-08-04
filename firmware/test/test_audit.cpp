@@ -56,7 +56,7 @@ TEST(validator_requires_finger_servo_for_fretted_string) {
     Profile p = uke();               // all four strings fretted, with finger servos
     CHECK(ProfileValidator::isActivatable(p));
     // Remove the finger servo of string 0: a fretted string without a finger is
-    // rejected (would pluck a wrong pitch).
+    // rejected (would sound a wrong pitch).
     for (auto& sv : p.servos)
         if (sv.function == "finger" && sv.stringIndex == 0) sv.enabled = false;
     CHECK(!ProfileValidator::isActivatable(p));

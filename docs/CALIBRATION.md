@@ -106,9 +106,9 @@ groups**. Each axis keeps its own `HomingController` instance.
 
 ### 3.1 Tuning
 
-Each string has: open MIDI note (`openNote`), maximum fret included (`maxFret`),
-and the position of each fret. Predefined tunings are provided (guitar, bass,
-ukulele, mandolin, banjo, custom), all fully editable.
+Each string has: open MIDI note (`openNote`), maximum position included
+(`maxFret`), and the location of each note position. Predefined tunings are
+provided (violin, viola, cello, contrabass, custom), all fully editable.
 
 ### 3.2 Theoretical calculation (§14.2)
 

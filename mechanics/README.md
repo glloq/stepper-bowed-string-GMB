@@ -153,7 +153,7 @@ stepsPerMm = (200 × 16) / (20 × 2) = 3200 / 40 = 80 steps/mm
 ```
 
 At 16 microsteps and 80 steps/mm the position resolution is 1/80 mm = 12.5 µm,
-comfortably finer than fret spacing on every example instrument.
+comfortably finer than semitone spacing on every example instrument.
 
 ## 7. Homing (§13) — mechanical reference
 

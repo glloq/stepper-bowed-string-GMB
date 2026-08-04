@@ -40,9 +40,9 @@ several times, the system automatically reverts to access-point mode.
 ## 2. Step 1 — Identification
 
 Fill in: instrument name, description (optional), **number of strings** (1 to 4),
-instrument type (ukulele, guitar, bass, mandolin, banjo…), proposed tuning,
-maximum number of frets. These values determine the note range and are announced
-to General-Midi-Boop (see [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md) §3).
+instrument type (violin, viola, cello, contrabass, custom), proposed tuning,
+maximum number of note positions. These values determine the note range and are
+announced to General-Midi-Boop (see [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md) §3).
 
 ---
 

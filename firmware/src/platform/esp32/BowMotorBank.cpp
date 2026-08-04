@@ -147,7 +147,8 @@ void BowMotorBank::writeMotor(int index) {
         if (stopped) {
             // Coast (both inputs low) or brake (both high) per config.
             uint8_t res = m.pwmResolutionBits;
-            if (res < 1) res = 1; if (res > 14) res = 14;
+            if (res < 1) res = 1;
+            if (res > 14) res = 14;
             const uint32_t hold = m.brakeOnStop ? ((1u << res) - 1u) : 0u;
             pwmWrite(a, 2 * index, hold);
             pwmWrite(b, 2 * index + 1, hold);

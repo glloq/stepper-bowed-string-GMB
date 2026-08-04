@@ -683,15 +683,18 @@ These pins are not necessarily unusable in all cases, but they must be classifie
 
 Initial example of automatic assignment:
 
-| Function              | Proposed GPIOs         |
-| --------------------- | ---------------------- |
-| STEP 1 to 6           | 4, 5, 6, 7, 15, 16     |
-| DIR 1 to 6            | 17, 18, 8, 9, 10, 11   |
-| HOME 1 to 6           | 12, 13, 14, 21, 38, 39 |
-| I²C SDA               | 40                     |
-| I²C SCL               | 41                     |
-| Global ENABLE         | 42                     |
-| PCA9685 safety output | 47                     |
+| Function              | Proposed GPIOs   |
+| --------------------- | ---------------- |
+| STEP 1 to 4           | 4, 5, 6, 7       |
+| DIR 1 to 4            | 17, 18, 8, 9     |
+| HOME 1 to 4           | 12, 13, 14, 21   |
+| BOW A 1 to 4 (PWM)    | 15, 16, 1, 2     |
+| BOW B 1 to 4 (PWM)    | 10, 11, 38, 39   |
+| I²C SDA               | 40               |
+| I²C SCL               | 41               |
+| Stepper ENABLE        | 42               |
+| Bow-motor MOTOR_EN    | 33               |
+| PCA9685 safety output | 47               |
 
 This assignment constitutes an initial software profile and not a universal rule.
 
@@ -857,11 +860,10 @@ position of each fret
 
 The system must offer predefined tunings:
 
-* guitar;
-* bass;
-* ukulele;
-* mandolin;
-* banjo;
+* violin (G3–D4–A4–E5);
+* viola (C3–G3–D4–A4);
+* cello (C2–G2–D3–A3);
+* contrabass (E1–A1–D2–G2);
 * custom configuration.
 
 The predefined tunings must remain fully modifiable.
@@ -1149,7 +1151,7 @@ Simplified example:
   "project": "Stepper-Bowed-Strings-GMB",
   "profileVersion": 1,
   "instrument": {
-    "name": "Ukulele 4 strings",
+    "name": "Violin 4 strings",
     "stringCount": 4
   },
   "board": {
@@ -1159,7 +1161,7 @@ Simplified example:
   },
   "network": {
     "mode": "station",
-    "hostname": "gmb-ukulele"
+    "hostname": "gmb-violin"
   },
   "strings": []
 }
@@ -1370,7 +1372,7 @@ firmware/
 
 The project will be considered functional when:
 
-1. one to six strings can be configured;
+1. one to four strings can be configured;
 2. each string uses a stepper motor and a single movable finger;
 3. the GPIOs can be assigned automatically;
 4. the interface offers only GPIOs compatible with the function;
@@ -1451,11 +1453,15 @@ Project developed from scratch
 
 Bowed string instruments only
 
-1 to 6 strings
+1 to 4 strings
 
 1 stepper motor per string
 
 1 single movable finger per string
+
+1 friction-wheel bow motor per string (H-bridge, LEDC PWM)
+
+Bow pressure set by the mandatory descent servo
 
 ESP32-S3
 

@@ -68,6 +68,20 @@ int main(int argc, char** argv) {
                   (p.strings.empty() ||
                    p2.strings[0].transmission == p.strings[0].transmission),
               "transmission round-trips");
+        // Bowed-specific fields must survive the round trip.
+        CHECK(p2.bowMotors.size() == p.bowMotors.size(), "bowMotors count round-trips");
+        CHECK(p.bowMotors.empty() ||
+                  (p2.bowMotors[0].driveMode == p.bowMotors[0].driveMode &&
+                   p2.bowMotors[0].minDutyPercent == p.bowMotors[0].minDutyPercent &&
+                   p2.bowMotors[0].pwmFreqHz == p.bowMotors[0].pwmFreqHz),
+              "bowMotors fields round-trip");
+        CHECK(p2.instrument.fretless == p.instrument.fretless, "fretless round-trips");
+        CHECK(p2.instrument.subType == p.instrument.subType, "subType round-trips");
+        CHECK(p2.midi.continuousDynamics == p.midi.continuousDynamics,
+              "continuousDynamics round-trips");
+        CHECK(p.servos.empty() ||
+                  p2.servos[0].contactUs == p.servos[0].contactUs,
+              "servo contactUs round-trips");
     }
 
     // An unknown enum string must be REJECTED, not silently defaulted.
