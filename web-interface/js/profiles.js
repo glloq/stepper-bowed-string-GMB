@@ -241,10 +241,10 @@
   function validateImport(obj) {
     var errs = [];
     if (!obj || typeof obj !== 'object') { errs.push('Not an object.'); return errs; }
-    if (obj.project !== 'Stepper-Plucked-Strings-GMB') errs.push('Wrong project tag.');
+    if (obj.project !== 'Stepper-Bowed-Strings-GMB') errs.push('Wrong project tag.');
     if (!obj.instrument) errs.push('Missing "instrument".');
     if (!Array.isArray(obj.strings)) errs.push('Missing "strings" array.');
-    if (obj.instrument && (obj.instrument.stringCount < 1 || obj.instrument.stringCount > 6)) errs.push('String count out of range.');
+    if (obj.instrument && (obj.instrument.stringCount < 1 || obj.instrument.stringCount > 4)) errs.push('String count out of range.');
     return errs;
   }
 

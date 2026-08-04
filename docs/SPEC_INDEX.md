@@ -1,6 +1,6 @@
 # Specification — pointer
 
-The authoritative **specification** for Stepper-Plucked-Strings-GMB is located
+The authoritative **specification** for Stepper-Bowed-Strings-GMB is located
 at the root of the repository:
 
 - 📄 [`../SPECIFICATION.md`](../SPECIFICATION.md) — main

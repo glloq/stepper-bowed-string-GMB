@@ -4,7 +4,7 @@
  * Shows the general state, Wi-Fi, MIDI source, active profile, strings-ready
  * count, notes playing, active faults, temperatures/voltages and a big STOP
  * (panic) button; plus a per-string table (state, note, fret, motor position,
- * target, distance, HOME/LIMIT, finger, plectrum, last fault). Live values
+ * target, distance, HOME/LIMIT, finger, bow, speed, last fault). Live values
  * come from the /ws/status WebSocket (mock pump when standalone).
  */
 (function (global) {
@@ -61,14 +61,14 @@
       capabilitiesRevision: p.capabilitiesRevision,
       strings: p.strings.map(function (s, i) {
         return { index: i, state: '—', note: null, fret: null, positionMm: 0, targetMm: 0,
-          distanceMm: 0, home: false, limit: false, finger: '—', plectrum: '—', lastFault: 'none', openNote: s.openNote };
+          distanceMm: 0, home: false, limit: false, finger: '—', bow: '—', bowSpeed: 0, lastFault: 'none', openNote: s.openNote };
       })
     };
   }
 
   function buildHead() {
     var cols = ['#', 'Open', 'State', 'Note', 'Fret', 'Pos (mm)', 'Target', 'Dist',
-      'HOME', 'LIMIT', 'Finger', 'Plectrum', 'Last fault'];
+      'HOME', 'LIMIT', 'Finger', 'Bow', 'Speed', 'Last fault'];
     return h('thead', h('tr', cols.map(function (c) { return h('th', c); })));
   }
 
@@ -130,7 +130,8 @@
         h('td', dot(s.home)),
         h('td', dot(s.limit)),
         h('td', s.finger),
-        h('td', s.plectrum),
+        h('td', s.bow),
+        h('td', (s.bowSpeed != null ? Math.round(s.bowSpeed * 100) + '%' : '—')),
         h('td', s.lastFault === 'none' ? h('span.muted', 'none') : h('span.pill.mini.error', s.lastFault))
       ]));
     });

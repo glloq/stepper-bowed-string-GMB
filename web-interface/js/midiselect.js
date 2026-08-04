@@ -35,7 +35,9 @@
           // 'custom' is intentionally omitted: no custom curve table exists yet,
           // so offering it would silently behave like 'linear' (audit P1-12).
           type: 'select', options: ['linear', 'soft', 'hard', 'exponential']
-        })),
+        }), 'Velocity sets the attack level of a bowed note.'),
+        GMB.field('Continuous dynamics', GMB.input(p.midi, 'continuousDynamics', { type: 'checkbox' }),
+          'Let CC7/CC11/CC1 and channel aftertouch modulate the bow speed & pressure of a sustained note in real time (a bowed crescendo).'),
         GMB.field('Sustain pedal', GMB.input(p.midi, 'sustainPedal', { type: 'checkbox', onChange: function () { GMB.render(); } })),
         p.midi.sustainPedal
           ? GMB.field('Sustain CC number', GMB.input(p.midi, 'sustainCc', { type: 'number', min: 0, max: 119 }), 'Default 64 (sustain pedal).')
@@ -61,8 +63,8 @@
           'Fixed delay from Note On to the note actually sounding, giving the finger a constant window to reach the fret.'),
         GMB.field('Finger lead (ms)', GMB.input(p.midi, 'fingerLeadMs', { type: 'number', min: 0, max: 500 }),
           'Start the finger descent this long before the carriage is estimated to arrive (0 = press only on arrival). Tune to avoid dragging.'),
-        GMB.field('Strum lead (ms)', GMB.input(p.midi, 'strumLeadMs', { type: 'number', min: 0, max: 500 }),
-          'Start lowering the strum lift this long before the string is ready, so it is engaged when the strike time comes.')
+        GMB.field('Bow lead (ms)', GMB.input(p.midi, 'bowLeadMs', { type: 'number', min: 0, max: 500 }),
+          'Start lowering the bow wheel to a light contact this long before the note starts, so it is already touching when bowing begins.')
       ])
     ]));
 

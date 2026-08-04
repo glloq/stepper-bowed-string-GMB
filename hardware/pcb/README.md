@@ -13,7 +13,7 @@ See `../schematics/README.md` for the schematic that the PCB will implement, and
 
 When produced, the PCB package will include:
 
-* Board layout hosting the ESP32-S3 module, **1–6 pluggable TMC2209 sockets**,
+* Board layout hosting the ESP32-S3 module, **1–4 pluggable TMC2209 sockets**,
   and the PCA9685 (on-board or headered).
 * **Separated power planes/rails** (§22): 24 V motor, 5–7.4 V servo, 5 V logic,
   3.3 V, with a structured common-ground strategy.

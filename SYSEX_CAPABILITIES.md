@@ -2,7 +2,7 @@
 
 ## 1. Objective
 
-Stepper-Plucked-Strings-GMB must automatically communicate its capabilities to General-Midi-Boop.
+Stepper-Bowed-Strings-GMB must automatically communicate its capabilities to General-Midi-Boop.
 
 The announced information must be generated from the active profile stored in the ESP32.
 
@@ -303,9 +303,9 @@ It must however be able to be limited in the Web interface.
 Examples:
 
 ```text
-6 strings with individual plectrums → maximum polyphony 6
+4 strings each with their own bow → maximum polyphony 4
 
-6 strings, per-string plucking
+4 strings, per-string bowing
 but independent sustain              → maximum polyphony 6
 
 6 strings with mechanical constraints
@@ -383,7 +383,7 @@ F0 7D 00 07 01
 F7
 ```
 
-For Stepper-Plucked-Strings-GMB:
+For Stepper-Bowed-Strings-GMB:
 
 ```text
 is_fretless = 0

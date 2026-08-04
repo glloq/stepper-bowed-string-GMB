@@ -109,11 +109,14 @@
       specs.push({ signal: 'STEP' + (i + 1), kind: 'step', label: 'STEP ' + (i + 1) });
       specs.push({ signal: 'DIR' + (i + 1), kind: 'dir', label: 'DIR ' + (i + 1) });
       specs.push({ signal: 'HOME' + (i + 1), kind: 'home', label: 'HOME ' + (i + 1) });
+      specs.push({ signal: 'BOWA' + (i + 1), kind: 'bowA', label: 'BOW A ' + (i + 1) + ' (PWM)' });
+      specs.push({ signal: 'BOWB' + (i + 1), kind: 'bowB', label: 'BOW B ' + (i + 1) + ' (PWM / dir)' });
     }
     specs.push({ signal: 'SDA', kind: 'sda', label: 'I2C SDA' });
     specs.push({ signal: 'SCL', kind: 'scl', label: 'I2C SCL' });
     specs.push({ signal: 'ENABLE', kind: 'enable', label: 'Global ENABLE' });
     specs.push({ signal: 'SERVO_OE', kind: 'servoOe', label: 'PCA9685 /OE (safety)' });
+    specs.push({ signal: 'MOTOR_EN', kind: 'bowEnable', label: 'Bow H-bridge enable' });
     return specs;
   }
 
@@ -181,7 +184,8 @@
     var p = GMB.state.profile;
     GMB.api.autoPins({
       stringCount: p.instrument.stringCount, useI2cServos: true,
-      globalEnable: true, servoSafetyOe: true, reserveUsb: p.board.reserveUsb
+      globalEnable: true, servoSafetyOe: true, reserveUsb: p.board.reserveUsb,
+      useBowMotors: true, bowMotorEnable: true
     }).then(function (res) {
       if (res.errors && res.errors.length) {
         GMB.toast('Auto-assign could not place every signal.', 'warn');

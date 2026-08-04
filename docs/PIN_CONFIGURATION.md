@@ -1,4 +1,4 @@
-# GPIO configuration — Stepper-Plucked-Strings-GMB
+# GPIO configuration — Stepper-Bowed-Strings-GMB
 
 > Source: `SPECIFICATION.md` §11 · Code: `firmware/src/core/board/BoardProfile.{h,cpp}`, `PinManager.{h,cpp}`.
 > Related documents: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`WEB_INTERFACE.md`](WEB_INTERFACE.md) · [`CALIBRATION.md`](CALIBRATION.md).
@@ -79,6 +79,9 @@ or non-exposed pins are never offered.
 | `I2cSda` | I²C | pins usable for I²C, recommended pair by default, none already used |
 | `I2cScl` | I²C | same |
 | `ServoOe` | `output` | safety output to the PCA9685's `/OE` |
+| `BowA` | `output` + `highSpeedOutput` | bow-motor H-bridge input A (PWM), like `Step` |
+| `BowB` | `output` + `highSpeedOutput` | bow-motor H-bridge input B (PWM in IN/IN, direction level in PH/EN) |
+| `BowEnable` | `output` | shared H-bridge enable / `nSLEEP` (`MOTOR_EN`), a safety cut |
 | `Generic` | `output` | any usable output |
 
 For a future USB interface, GPIO19 and GPIO20 are automatically reserved.
@@ -109,18 +112,39 @@ The pin manager knows at minimum these restrictions:
 `makeEsp32S3DevKitC1()` provides the reference profile. Automatic assignment
 (`PinManager::autoAssign`) follows this initial plan:
 
-| Function | Proposed GPIOs |
+| Function | Proposed GPIOs (4 strings) |
 | -------- | ------------- |
-| STEP 1 to 6 | 4, 5, 6, 7, 15, 16 |
-| DIR 1 to 6 | 17, 18, 8, 9, 10, 11 |
-| HOME 1 to 6 | 12, 13, 14, 21, 38, 39 |
+| STEP 1 to 4 | 4, 5, 6, 7 |
+| DIR 1 to 4 | 17, 18, 8, 9 |
+| HOME 1 to 4 | 12, 13, 14, 21 |
+| BOWA 1 to 4 (bow motor PWM A) | 15, 16, 1, 2 |
+| BOWB 1 to 4 (bow motor PWM B / dir) | 10, 11, 38, 39 |
 | I²C SDA | 40 |
 | I²C SCL | 41 |
 | Global ENABLE | 42 |
 | PCA9685 safety output (`/OE`) | 47 |
+| Bow H-bridge enable (`MOTOR_EN`) | 33 |
 
 > This plan is an **initial software profile**, not a universal rule: it can be
-> replaced from the interface (advanced mode).
+> replaced from the interface (advanced mode). A full four-string build uses every
+> recommended pin, so `MOTOR_EN` lands on a caution pin (33) — reassign it if your
+> board variant needs 33 for memory.
+
+### The LEDC (PWM) channel budget
+
+The ESP32-S3 has **8 LEDC channels**, shared between the bow motors and any
+direct-GPIO servos. A bow motor in the default `inIn` mode drives **two** PWM
+inputs (BOWA + BOWB) = 2 channels; `phaseEnable` drives **one** (BOWA; the
+direction pin is a plain level) = 1 channel. Four `inIn` motors therefore use all
+eight channels, which is why:
+
+* the string count is capped at **4** (`kMaxStrings`), and
+* on a full 4-string build the finger and bow-press servos ride the **PCA9685**
+  (I²C), leaving the LEDC pool for the motors.
+
+`ProfileValidator` rejects any profile where `directServos + bowMotorPWMchannels
+> 8`. Choosing `phaseEnable` for the motors frees channels for direct-GPIO servos
+on a smaller build.
 
 ### Pins kept reserved by default
 
@@ -147,6 +171,8 @@ struct PinRequest {
     bool servoSafetyOe = true;  // PCA9685 /OE wired to a safety pin
     bool reserveUsb = true;     // keep GPIO19/20 free for native USB
     bool useLimitSwitches = false;
+    bool useBowMotors = true;   // one H-bridge friction-wheel motor per string
+    bool bowMotorEnable = true; // shared H-bridge enable / nSLEEP (MOTOR_EN)
 };
 ```
 

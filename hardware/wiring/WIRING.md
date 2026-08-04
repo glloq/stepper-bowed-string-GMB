@@ -1,6 +1,6 @@
 # Wiring guide
 
-Connection guide for the **Stepper-Plucked-Strings-GMB** reference electronics
+Connection guide for the **Stepper-Bowed-Strings-GMB** reference electronics
 (SPECIFICATION.md §7 and §22). Default GPIO come from the ESP32-S3-DevKitC-1
 board profile (§11.5, `board-profiles/esp32-s3-devkitc-1.json`); every line can
 be reassigned from the web interface.
@@ -86,12 +86,13 @@ may also force `/OE` high directly.
 
 | Channel | Function | Servo config `function` |
 | :-----: | -------- | ----------------------- |
-| 0–5 | finger press (one per string) | `finger` |
-| 6–11 | individual pluck (one per string) | `pluck` |
-| 12–15 | dampers / auxiliary | `damper`, `sharedDamper`, `aux` |
+| 0–3 | finger press (one per string) | `finger` |
+| 4–7 | bow press / descent (one per string) | `bowPress` |
+| 8–15 | auxiliary | `aux` |
 
-In the example profiles: finger servos on channels `0 … N−1`, pluck servos on
-`6 … 6+N−1`.
+In the example profiles: finger servos on channels `0 … N−1`, bow-press servos on
+`4 … 4+N−1`. The bow motors are **not** on the PCA9685 — they wire to the ESP32
+`BOWA{n}`/`BOWB{n}` pins through their H-bridges, with a shared `MOTOR_EN`.
 
 ## 4. Power rails (§22)
 

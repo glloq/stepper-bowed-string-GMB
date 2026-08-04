@@ -1,4 +1,4 @@
-# Stepper-Plucked-Strings-GMB — Web configuration interface
+# Stepper-Bowed-Strings-GMB — Web configuration interface
 
 Local, browser-based configuration UI for the ESP32-S3 MIDI instrument
 controller. It lets a beginner set up and run the instrument entirely from a
@@ -38,7 +38,7 @@ The firmware serves the static files from LittleFS at the device root:
 ```
 
 Reach it at the device IP (station mode) or the captive-portal address in
-access-point mode (default SSID `Stepper-Plucked-Strings-GMB`).
+access-point mode (default SSID `Stepper-Bowed-Strings-GMB`).
 
 ## Mock mode (standalone / demo)
 
@@ -87,29 +87,30 @@ values, hidden fine-tuning, only recommended GPIOs) and **Advanced** (manual
 GPIO assignment including caution pins, detailed motor/servo/homing parameters,
 SysEx block toggles, raw byte views), per SPECIFICATION.md §9.2.
 
-## Per-string servos, endstops & fret editor (wizard steps 5–7)
+## Per-string servos, bow motor, endstops & position editor (wizard steps 5–7)
 
-The setup wizard configures a full instrument (1–6 strings) with a stepper plus
-servos per string, **with or without a PCA9685**:
+The setup wizard configures a full instrument (1–4 strings) with a stepper, two
+servos and a friction-wheel bow motor per string, **with or without a PCA9685**:
 
-- **Servos per string (step 6).** For each string, add the servos it uses —
-  **finger**, **strum**, an optional **strum lift** (raises/lowers the strum
-  servo per stroke), **damper** and an optional **pluck**. Each servo picks its
+- **Servos & bow motor per string (step 6).** For each string, add its servos —
+  a **finger** (pitch stop) and the mandatory **bow press** (descent servo that
+  lowers the friction wheel and sets the bow pressure). Each servo picks its
   signal **source**:
   - **PCA9685** — choose `pcaBoard` (0–3, i.e. up to four boards / 64 channels)
     and `channel` (0–15). A compact channel-availability map flags duplicate
-    `board+channel` in red.
+    `board+channel` in red. This is the recommended source on a bowed build: the
+    ESP32-S3's eight LEDC channels are taken by the bow motors.
   - **Direct GPIO** — choose a free ESP32 pin, filtered with the same
-    green/yellow/red capability rules as the pin grid (reserved/USB pins hidden,
-    caution pins Advanced-only, pins already used by a stepper signal or another
-    servo excluded).
+    green/yellow/red capability rules as the pin grid.
 
-  The system works with **no PCA at all** (every servo on a direct GPIO) or any
-  mix. Per-string servos get their `stringIndex` set automatically; Advanced mode
-  also exposes **shared/auxiliary** servos (`stringIndex = -1`, e.g.
-  `sharedDamper`/`aux`). Each servo carries its calibration (rest/active µs,
-  pulse min/max, inverted, travelMs, settleMs, disableAtRest) and **Test
-  rest/active** buttons (`POST /api/test/servo`).
+  A **bow press** servo exposes `restUs` (wheel lifted), `contactUs` (lightest
+  audible contact) and `activeUs` (maximum pressure), plus an engage delay.
+  Below the servo list, each string's **bow motor** card sets the H-bridge drive
+  mode (IN/IN or PH/EN), min/max duty %, PWM frequency, direction/brake and
+  spin-up/down times, with **Test spin / Reverse / Stop** buttons
+  (`POST /api/test/motor`). Advanced mode also exposes **auxiliary** servos
+  (`stringIndex = -1`). **Test rest/active** buttons drive a servo
+  (`POST /api/test/servo`).
 
 - **Endstops per string (step 5).** Each string's HOME switch GPIO
   (input+interrupt capable) plus the full homing sub-object
@@ -142,12 +143,14 @@ REST (all JSON):
 | POST | `/api/panic` | software panic / STOP (§21.3) |
 | POST | `/api/test/note` | integrated note/string/fret test; returns a step trace (§16) |
 | POST | `/api/test/servo` | drive one servo to `rest`/`active` (armed only) |
+| POST | `/api/test/motor` | spin one bow wheel at a duty/direction (armed only) |
 | POST | `/api/test/jog` | nudge one axis by a signed mm delta (armed only) |
 | POST | `/api/test/endstop` | live HOME/LIMIT switch readout for one axis (`{ok, home:bool, limit:bool}`) |
 | POST | `/api/sysex/request` | run a SysEx request, returns sent + received + decoded (§18) |
 | GET  | `/api/capabilities` | computed GMB capabilities snapshot (§17) |
 
 `POST /api/test/servo` body: `{ index, active }` → `{ ok, accepted, commandId, note }` (202 queued / 503 queue full / 409 not armed).
+`POST /api/test/motor` body: `{ index, duty, forward }` → `{ ok, accepted, commandId, note }` (202 queued / 409 not armed; `duty` 0..1, `duty:0` stops the wheel).
 `POST /api/test/jog` body: `{ axis, deltaMm }` → `{ ok, accepted, commandId, note }` (202 queued / 409 not armed / 503 queue full; clamped to travel and ±25 mm).
 `POST /api/test/endstop` body: `{ axis }` → `{ ok, home:<bool>, limit:<bool> }`.
 
@@ -162,10 +165,13 @@ WebSocket:
 
 Import/export use the project profile schema (`project`, `profileVersion`,
 `capabilitiesRevision`, `instrument`, `board`, `pins`, `network`, `midi`,
-`stringFretSelection`, `strings`, `servos`). Field names match the firmware core
-(`firmware/src/core/…`). Each entry in `servos` carries
+`stringFretSelection`, `strings`, `servos`, `bowMotors`). Field names match the
+firmware core (`firmware/src/core/…`). Each entry in `servos` carries
 `source` (`"pca"`/`"gpio"`), `stringIndex`, `pcaBoard`, `channel` and `gpio`
-alongside its µs calibration; each string in `strings` carries a `homing`
+alongside its µs calibration (`restUs`/`contactUs`/`activeUs`); each entry in
+`bowMotors` carries `stringIndex`, `driveMode` (`"inIn"`/`"phaseEnable"`), duty
+limits, PWM settings and spin-up/down times (its GPIOs live in `pins` as
+`BOWA{n}`/`BOWB{n}` + `MOTOR_EN`). Each string in `strings` carries a `homing`
 sub-object and an optional `calibratedFretMm[]` table.
 **The Wi-Fi password is never included in exports.**
 

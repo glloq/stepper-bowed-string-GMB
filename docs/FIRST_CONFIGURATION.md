@@ -1,4 +1,4 @@
-# First configuration guide — Stepper-Plucked-Strings-GMB
+# First configuration guide — Stepper-Bowed-Strings-GMB
 
 > Source: `SPECIFICATION.md` §8, §10, §26 (first configuration guide).
 > Related documents: [`WEB_INTERFACE.md`](WEB_INTERFACE.md) · [`PIN_CONFIGURATION.md`](PIN_CONFIGURATION.md) · [`CALIBRATION.md`](CALIBRATION.md) · [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md) · [`SAFETY.md`](SAFETY.md).
@@ -24,7 +24,7 @@ the **simplified mode** of the Web interface. No code modification is needed.
 At first power-on, the ESP32 starts in **access-point mode**:
 
 ```text
-Default SSID: Stepper-Plucked-Strings-GMB
+Default SSID: Stepper-Bowed-Strings-GMB
 ```
 
 1. Connect your phone/computer to this Wi-Fi network.
@@ -39,7 +39,7 @@ several times, the system automatically reverts to access-point mode.
 
 ## 2. Step 1 — Identification
 
-Fill in: instrument name, description (optional), **number of strings** (1 to 6),
+Fill in: instrument name, description (optional), **number of strings** (1 to 4),
 instrument type (ukulele, guitar, bass, mandolin, banjo…), proposed tuning,
 maximum number of frets. These values determine the note range and are announced
 to General-Midi-Boop (see [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md) §3).
@@ -95,7 +95,7 @@ machine `CHECK_SENSOR → … → READY`, see [`CALIBRATION.md`](CALIBRATION.md)
 
 For each servo: PCA9685 channel, rest position, active position, min/max limits,
 inverted direction, travel time, settling time, disable at rest. Typical channel
-allocation: fingers 0–5, plucking 6–11, auxiliaries 12–15 (see
+allocation: fingers 0–3, bow-press 4–7, auxiliaries 8–15 (see
 [`CALIBRATION.md`](CALIBRATION.md) §4).
 
 ---
@@ -113,7 +113,7 @@ Two methods:
 
 ## 9. Step 8 — Test
 
-Test progressively: each motor, each sensor, each finger, each pick, each note,
+Test progressively: each motor, each sensor, each finger, each bow motor, each note,
 each string, a chord, then the **general stop** (STOP). Keep the STOP button
 within reach (software panic — see [`SAFETY.md`](SAFETY.md) §3).
 
