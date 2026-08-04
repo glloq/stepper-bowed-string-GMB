@@ -128,17 +128,22 @@
   // match firmware PinAssignment.signal ("STEP1", "HOME3", "SDA"...).
   // ---------------------------------------------------------------------------
   var RECOMMENDED = {
-    STEP: [4, 5, 6, 7, 15, 16],
-    DIR: [17, 18, 8, 9, 10, 11],
-    HOME: [12, 13, 14, 21, 38, 39],
-    SDA: 40, SCL: 41, ENABLE: 42, SERVO_OE: 47
+    STEP: [4, 5, 6, 7],
+    DIR: [17, 18, 8, 9],
+    HOME: [12, 13, 14, 21],
+    BOWA: [15, 16, 1, 2],
+    BOWB: [10, 11, 38, 39],
+    SDA: 40, SCL: 41, ENABLE: 42, SERVO_OE: 47, MOTOR_EN: 33
   };
   GMB.RECOMMENDED = RECOMMENDED;
 
   // Which capability a signal kind needs (mirrors BoardProfile::candidatesFor).
   var SIGNAL_KIND = {
     step: 'step', dir: 'dir', enable: 'enable', home: 'home', limit: 'limit',
-    diag: 'diag', sda: 'i2cSda', scl: 'i2cScl', servoOe: 'servoOe', servo: 'servo'
+    diag: 'diag', sda: 'i2cSda', scl: 'i2cScl', servoOe: 'servoOe', servo: 'servo',
+    // Bow-motor H-bridge: BOWA/BOWB need a fast (LEDC) output like STEP; the shared
+    // MOTOR_EN is a plain output like the driver ENABLE.
+    bowA: 'step', bowB: 'step', bowEnable: 'enable'
   };
   GMB.SIGNAL_KIND = SIGNAL_KIND;
 
@@ -161,20 +166,20 @@
   };
 
   // ---------------------------------------------------------------------------
-  // Sample profile — a 4-string GCEA ukulele (reentrant tuning G4 C4 E4 A4).
-  // Matches the JSON schema in the project brief exactly.
+  // Sample profile — a 4-string violin (G3 D4 A4 E5), fretless. Matches the JSON
+  // schema in the project brief exactly.
   // ---------------------------------------------------------------------------
-  function ukuleleString(openNote) {
+  function violinString(openNote) {
     return {
       enabled: true,
-      openNote: openNote, maxFret: 12, scaleLengthMm: 330,
+      openNote: openNote, maxFret: 24, scaleLengthMm: 328,
       transmission: 'beltGt2', stepsPerRevolution: 200, microsteps: 16,
       pulleyTeeth: 20, beltPitchMm: 2, leadPerRevolutionMm: 8, customStepsPerMm: 80,
-      invertDirection: false, minPositionMm: 0, maxPositionMm: 300, fretOffsetMm: 0,
+      invertDirection: false, minPositionMm: 0, maxPositionMm: 260, fretOffsetMm: 0,
       maxSpeedMmS: 200, maxAccelMmS2: 2000, calibratedFretMm: [],
       homing: {
         direction: -1, fastSpeedMmS: 40, slowSpeedMmS: 5, backoffMm: 3, offsetMm: 0,
-        timeoutMs: 8000, maxSearchMm: 500, sensorActiveHigh: true
+        timeoutMs: 8000, maxSearchMm: 300, sensorActiveHigh: true
       }
     };
   }
@@ -199,15 +204,34 @@
       travelMs: opts.travelMs || 120,
       settleMs: opts.settleMs || 30,
       disableAtRest: opts.disableAtRest !== false,
-      // Strum / pluck stroke shaping (matches firmware ServoConfig).
-      engageDelayMs: opts.engageDelayMs || 0,
-      alternateDirection: !!opts.alternateDirection,
-      activeAltUs: opts.activeAltUs || 0,
-      strokeMs: opts.strokeMs || 0,
-      minStrikeUs: opts.minStrikeUs || 0
+      // bowPress only: pulse for the lightest audible contact (bow intensity 0).
+      contactUs: opts.contactUs || 1400,
+      // bowPress only: pause after the wheel is down before the motor spins up.
+      engageDelayMs: opts.engageDelayMs || 0
     };
   }
   GMB.servoDefaults = servo;
+
+  // A single bow-motor entry (matches firmware BowMotorConfig). One friction-wheel
+  // motor per string, driven through an H-bridge; the GPIOs live in the pin table
+  // (BOWA{n}/BOWB{n} + shared MOTOR_EN).
+  function bowMotor(stringIndex, opts) {
+    opts = opts || {};
+    return {
+      enabled: opts.enabled !== false,
+      stringIndex: stringIndex === undefined ? -1 : stringIndex,
+      driveMode: opts.driveMode || 'inIn',      // "inIn" | "phaseEnable"
+      pwmFreqHz: opts.pwmFreqHz || 20000,
+      pwmResolutionBits: opts.pwmResolutionBits || 10,
+      minDutyPercent: opts.minDutyPercent === undefined ? 25 : opts.minDutyPercent,
+      maxDutyPercent: opts.maxDutyPercent === undefined ? 100 : opts.maxDutyPercent,
+      reverse: !!opts.reverse,
+      brakeOnStop: !!opts.brakeOnStop,
+      spinUpMs: opts.spinUpMs || 40,
+      spinDownMs: opts.spinDownMs || 60
+    };
+  }
+  GMB.bowMotorDefaults = bowMotor;
 
   // Theoretical fret position (spec 14.2), measured from the nut (fret 0 = 0):
   // scale·(1−2^(−fret/12)). The per-string fret offset (nut → FDC) is applied by
@@ -224,11 +248,11 @@
 
   function sampleProfile() {
     return {
-      project: 'Stepper-Plucked-Strings-GMB', profileVersion: 1, capabilitiesRevision: 7,
+      project: 'Stepper-Bowed-Strings-GMB', profileVersion: 1, capabilitiesRevision: 7,
       instrument: {
-        name: 'Ukulele GCEA', description: '4-string soprano ukulele',
-        stringCount: 4, type: 'ukulele', gmProgram: 24, typeId: 4,
-        capo: 0, transpose: 0
+        name: 'Violin', description: '4-string violin, fretless (G-D-A-E)',
+        stringCount: 4, type: 'violin', gmProgram: 40, typeId: 5, subType: 0,
+        fretless: true, capo: 0, transpose: 0
       },
       board: { profile: 'esp32-s3-devkitc-1', reserveUsb: true, automaticPinAssignment: true },
       pins: [
@@ -238,45 +262,52 @@
         { signal: 'DIR3', kind: 'dir', gpio: 8 }, { signal: 'DIR4', kind: 'dir', gpio: 9 },
         { signal: 'HOME1', kind: 'home', gpio: 12 }, { signal: 'HOME2', kind: 'home', gpio: 13 },
         { signal: 'HOME3', kind: 'home', gpio: 14 }, { signal: 'HOME4', kind: 'home', gpio: 21 },
-        { signal: 'SDA', kind: 'sda', gpio: 40 }, { signal: 'SCL', kind: 'scl', gpio: 41 },
-        { signal: 'ENABLE', kind: 'enable', gpio: 42 }, { signal: 'SERVO_OE', kind: 'servoOe', gpio: 47 }
+        { signal: 'BOWA1', kind: 'bowA', gpio: 15 }, { signal: 'BOWA2', kind: 'bowA', gpio: 16 },
+        { signal: 'BOWA3', kind: 'bowA', gpio: 1 }, { signal: 'BOWA4', kind: 'bowA', gpio: 2 },
+        { signal: 'BOWB1', kind: 'bowB', gpio: 10 }, { signal: 'BOWB2', kind: 'bowB', gpio: 11 },
+        { signal: 'BOWB3', kind: 'bowB', gpio: 38 }, { signal: 'BOWB4', kind: 'bowB', gpio: 39 },
+        { signal: 'SDA', kind: 'i2cSda', gpio: 40 }, { signal: 'SCL', kind: 'i2cScl', gpio: 41 },
+        { signal: 'ENABLE', kind: 'enable', gpio: 42 }, { signal: 'SERVO_OE', kind: 'servoOe', gpio: 47 },
+        { signal: 'MOTOR_EN', kind: 'bowEnable', gpio: 33 }
       ],
       network: {
-        mode: 'accessPoint', ssid: '', hostname: 'gmb-instrument',
-        apSsid: 'Stepper-Plucked-Strings-GMB', staticIp: false
+        mode: 'accessPoint', ssid: '', hostname: 'gmb-violin',
+        apSsid: 'Stepper-Bowed-Strings-GMB', staticIp: false
       },
       midi: {
         globalChannel: 0, omni: false, transpose: 0, chordWindowMs: 3,
         velocityCurve: 'linear', sustainPedal: true, sustainCc: 64,
-        saturationStrategy: 'priorityLow',
-        noteExecutionDelayMs: 0, fingerLeadMs: 0, strumLeadMs: 0
+        saturationStrategy: 'priorityLow', continuousDynamics: true,
+        noteExecutionDelayMs: 0, fingerLeadMs: 0, bowLeadMs: 0
       },
       stringFretSelection: {
         enabled: true, mode: 'hybrid', preset: 'general-midi-boop', perMidiChannel: true,
         selectionTimeoutMs: 100, prepareOnCompleteSelection: true, queueDepth: 32,
         string: { ccNumber: 20, minimum: 1, maximum: 4, offset: 0, numbering: 'oneBased',
           reverseOrder: false, mapping: [0, 1, 2, 3] },
-        fret: { ccNumber: 21, minimum: 0, maximum: 12, offset: 0, invalidValuePolicy: 'automaticFallback' },
+        fret: { ccNumber: 21, minimum: 0, maximum: 24, offset: 0, invalidValuePolicy: 'automaticFallback' },
         validation: {
           notePositionPolicy: 'ccPriorityWithWarning',
           missingSelectionPolicy: 'automaticAllocation',
           expiredSelectionPolicy: 'automaticAllocation'
         }
       },
-      // Ukulele GCEA: physical order low->high used by GMB = G4(67) C4(60) E4(64) A4(69)
-      strings: [ukuleleString(67), ukuleleString(60), ukuleleString(64), ukuleleString(69)],
-      // A representative mix: one finger + one pluck per string on PCA board 0
-      // (channels 0–3 fingers, 6–9 plucks — the recommended layout).
+      // Violin: physical order low->high = G3(55) D4(62) A4(69) E5(76)
+      strings: [violinString(55), violinString(62), violinString(69), violinString(76)],
+      // Fingers on PCA channels 0–3, bow-press (descent) servos on 4–7. The eight
+      // LEDC channels are taken by the bow motors, so the servos ride the PCA9685.
       servos: [
         servo('finger', 0, { channel: 0 }),
         servo('finger', 1, { channel: 1 }),
         servo('finger', 2, { channel: 2 }),
         servo('finger', 3, { channel: 3 }),
-        servo('pluck', 0, { channel: 6, activeUs: 1700, travelMs: 90, settleMs: 20 }),
-        servo('pluck', 1, { channel: 7, activeUs: 1700, travelMs: 90, settleMs: 20 }),
-        servo('pluck', 2, { channel: 8, activeUs: 1700, travelMs: 90, settleMs: 20 }),
-        servo('pluck', 3, { channel: 9, activeUs: 1700, travelMs: 90, settleMs: 20 })
-      ]
+        servo('bowPress', 0, { channel: 4, restUs: 1000, contactUs: 1400, activeUs: 1900, travelMs: 80, settleMs: 20 }),
+        servo('bowPress', 1, { channel: 5, restUs: 1000, contactUs: 1400, activeUs: 1900, travelMs: 80, settleMs: 20 }),
+        servo('bowPress', 2, { channel: 6, restUs: 1000, contactUs: 1400, activeUs: 1900, travelMs: 80, settleMs: 20 }),
+        servo('bowPress', 3, { channel: 7, restUs: 1000, contactUs: 1400, activeUs: 1900, travelMs: 80, settleMs: 20 })
+      ],
+      // One friction-wheel bow motor per string (H-bridge, IN/IN).
+      bowMotors: [bowMotor(0), bowMotor(1), bowMotor(2), bowMotor(3)]
     };
   }
   GMB.sampleProfile = sampleProfile;
@@ -351,7 +382,7 @@
           note: null, fret: null,
           positionMm: 0, targetMm: 0, distanceMm: 0,
           home: true, limit: false,
-          finger: 'up', plectrum: 'rest', lastFault: 'none',
+          finger: 'up', bow: 'off', bowSpeed: 0, lastFault: 'none',
           openNote: s.openNote
         };
       })
@@ -404,6 +435,10 @@
       pins.push({ signal: 'STEP' + (i + 1), kind: 'step', gpio: RECOMMENDED.STEP[i] });
       pins.push({ signal: 'DIR' + (i + 1), kind: 'dir', gpio: RECOMMENDED.DIR[i] });
       pins.push({ signal: 'HOME' + (i + 1), kind: 'home', gpio: RECOMMENDED.HOME[i] });
+      if (req.useBowMotors !== false) {
+        pins.push({ signal: 'BOWA' + (i + 1), kind: 'bowA', gpio: RECOMMENDED.BOWA[i] });
+        pins.push({ signal: 'BOWB' + (i + 1), kind: 'bowB', gpio: RECOMMENDED.BOWB[i] });
+      }
     }
     if (req.useI2cServos !== false) {
       pins.push({ signal: 'SDA', kind: 'sda', gpio: RECOMMENDED.SDA });
@@ -411,6 +446,8 @@
     }
     if (req.globalEnable !== false) pins.push({ signal: 'ENABLE', kind: 'enable', gpio: RECOMMENDED.ENABLE });
     if (req.servoSafetyOe !== false) pins.push({ signal: 'SERVO_OE', kind: 'servoOe', gpio: RECOMMENDED.SERVO_OE });
+    if (req.useBowMotors !== false && req.bowMotorEnable !== false)
+      pins.push({ signal: 'MOTOR_EN', kind: 'bowEnable', gpio: RECOMMENDED.MOTOR_EN });
     return { pins: pins, errors: [] };
   }
 
@@ -801,6 +838,15 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(wire)
       }, function () { return mockTestServo(payload); });
     },
+    // POST /api/test/motor -> { ok } (409 if not armed). Body: { index, duty, forward }.
+    // Spins one bow wheel for bring-up; duty 0 stops it.
+    testMotor: function (payload) {
+      var wire = { index: payload.index | 0, duty: +payload.duty || 0,
+        forward: payload.forward !== false };
+      return this._call('/api/test/motor', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(wire)
+      }, function () { return mockTestMotor(payload); });
+    },
     // GET /api/commands?id=N -> { id, state:"queued"|"succeeded"|"refused"|"unknown" }.
     // Lets a 202-accepted command (e.g. a jog) be followed up for its real outcome.
     commandState: function (id) {
@@ -860,7 +906,7 @@
       { step: 'Axis moving', detail: 'string ' + payload.string + ' -> fret ' + payload.fret },
       { step: 'Position reached', detail: 'ok' },
       { step: 'Finger pressed', detail: payload.fret === 0 ? 'skipped (open string)' : 'ok' },
-      { step: 'String plucked', detail: 'velocity ' + payload.velocity }
+      { step: 'Bow engaged', detail: 'velocity ' + payload.velocity + ' (continuous)' }
     ];
     // Also inject the events into the mock MIDI stream so the monitor shows them.
     injectMidi(payload);
@@ -879,6 +925,20 @@
       ok: true,
       message: 'Servo "' + (payload.function || 'servo') + '" (' + where + ') driven to ' +
         to + ' (' + us + ' µs).'
+    };
+  }
+
+  // Mock bow-motor test (/api/test/motor): matches the firmware contract
+  // { ok } for a { index, duty, forward } request.
+  function mockTestMotor(payload) {
+    var duty = +payload.duty || 0;
+    var dir = payload.forward !== false ? 'forward' : 'reverse';
+    return {
+      ok: true,
+      message: duty <= 0
+        ? 'Bow motor ' + (payload.index | 0) + ' stopped.'
+        : 'Bow motor ' + (payload.index | 0) + ' spinning ' + dir + ' at ' +
+          Math.round(duty * 100) + '% duty.'
     };
   }
 

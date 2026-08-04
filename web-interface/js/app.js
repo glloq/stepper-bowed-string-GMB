@@ -215,7 +215,7 @@
 
     var nav = h('nav.sidebar', [
       h('div.brand', [h('div.brand-mark', 'GMB'),
-        h('div.brand-text', [h('strong', 'Stepper-Plucked'), h('small', 'Strings-GMB')])]),
+        h('div.brand-text', [h('strong', 'Stepper-Bowed'), h('small', 'Strings-GMB')])]),
       h('div.nav-list', TABS.map(function (t) {
         return h('button.nav-item', {
           'data-tab': t.id, onclick: function () { navigate(t.id); },
