@@ -303,9 +303,9 @@ It must however be able to be limited in the Web interface.
 Examples:
 
 ```text
-6 strings with individual plectrums → maximum polyphony 6
+4 strings each with their own bow → maximum polyphony 4
 
-6 strings, per-string plucking
+4 strings, per-string bowing
 but independent sustain              → maximum polyphony 6
 
 6 strings with mechanical constraints

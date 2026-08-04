@@ -28,9 +28,9 @@ Per string the reference build carries (§1):
 
 ```text
 1 stepper motor        1 finger-press mechanism
-1 linear axis          1 pluck mechanism
-1 carriage             1 HOME reference sensor
-1 single finger
+1 linear axis          1 bow-wheel head (motor + friction wheel)
+1 carriage             1 bow-press (descent) servo
+1 single finger        1 HOME reference sensor
 ```
 
 ## 2. Finger press (§5.2)
@@ -41,28 +41,29 @@ string. The reference mechanism is **one servo per string** (PCA9685 channels
 0–5). In the profile this is a servo with `function: "finger"`, using `restUs`
 (lifted) and `activeUs` (pressed), plus `travelMs`/`settleMs` timing.
 
-Open string: finger stays lifted; the note is plucked directly (§15.3). An
-advanced option can instead press "fret 0" for specific mechanics.
+Open string (position 0): finger stays lifted; the wheel still lowers and bows
+it. An advanced option can instead press "position 0" for specific mechanics.
 
-## 3. Setting the string vibrating (§5.3)
+## 3. Bowing the string (§5.3)
 
-Each string is set vibrating by **its own** actuator — there is no shared
-strummer; strumming is per string:
+Each string is excited **continuously** by its own motorised **friction wheel**
+(the "bow"), lowered onto the string by a **descent servo**:
 
-* **Individual pluck** — one pluck actuator per string (servo `function: "pluck"`,
-  PCA9685 channels 6–11). Enables chords, repeated notes, per-string tremolo and
-  velocity, and precise per-string triggering.
-* **Per-string strum** — a per-string strum servo (`function: "strum"`) with an
-  optional `strumLift` that lowers the strum servo onto the string for a stroke
-  and raises it after. Supports up/down alternating strokes, adjustable stroke
-  speed and depth, and an engage delay — all per string.
+* **Bow motor** — a DC gear motor turning a friction wheel (rosin-coated or a
+  rubber/silicone O-ring), driven through an **H-bridge**. Its PWM duty is the
+  **bow speed**. The GPIOs are `BOWA{n}`/`BOWB{n}` in the pin table, plus a shared
+  `MOTOR_EN`. Two drive modes: `IN/IN` (two PWM inputs) or `PH/EN` (direction +
+  PWM). Optional direction reversal changes the bow direction.
+* **Bow-press (descent) servo** — a mandatory per-string servo
+  (`function: "bowPress"`, PCA9685 channels 4–7) that lowers the wheel onto the
+  string and sets the **bow pressure**: `restUs` lifts the wheel clear,
+  `contactUs` is the lightest audible touch, `activeUs` is full pressure.
 
-Per string, several servo roles can be defined: `finger` (press), `pluck`
-(individual plectrum), `strum` (per-string strum), `strumLift` (an optional
-servo that lowers the strum servo onto the string for a stroke, then raises it)
-and `damper` (per-string mute). Each string also has its own endstop
-: the `HOME` reference sensor, plus an optional `LIMIT` switch at the far
-end.
+A note is engaged by lowering the wheel and spinning the motor, sustained while
+the wheel turns, and ended by lifting the wheel — there is no separate damper.
+Per string, two servo roles are defined — `finger` (press) and `bowPress`
+(descent) — plus a shared `aux` role. Each string also has its own endstop: the
+`HOME` reference sensor, plus an optional `LIMIT` switch at the far end.
 
 ## 3.1 Servo signal source: PCA9685 or direct GPIO
 

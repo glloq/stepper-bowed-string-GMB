@@ -23,7 +23,7 @@ String 1 → stepper motor 1 → movable finger 1
 String 2 → stepper motor 2 → movable finger 2
 String 3 → stepper motor 3 → movable finger 3
 ...
-String 6 → stepper motor 6 → movable finger 6
+String 4 → stepper motor 4 → movable finger 4
 ```
 
 For each string:
@@ -34,13 +34,13 @@ For each string:
 1 carriage
 1 movable finger
 1 finger pressing mechanism
-1 pluck mechanism
+1 bow-wheel head + descent servo
 1 reference sensor
 ```
 
 The stepper motor handles exclusively the longitudinal movement of the finger.
 
-Pressing, plucking and damping may be handled by servomotors or other auxiliary actuators, but they do not replace the stepper motor used to select the note.
+Pressing and bow contact may be handled by servomotors or other auxiliary actuators, but they do not replace the stepper motor used to select the note.
 
 ---
 
@@ -252,9 +252,9 @@ number of movable fingers
         │                  │                  │
  STEP/DIR command         I²C              Sensors
         │                  │                  │
- 1 to 6 drivers         PCA9685          HOME / LIMIT
+ 1 to 4 drivers         PCA9685          HOME / LIMIT
         │                  │
- 1 to 6 motors      1 to 16 servos
+ 1 to 4 motors      1 to 16 servos
 ```
 
 ## 7.1 Main controller
@@ -311,8 +311,8 @@ Recommended allocation:
 | Channels | Use                                          |
 | -------- | -------------------------------------------- |
 | 0 to 5   | finger pressing                              |
-| 6 to 11  | individual pluck                             |
-| 12 to 15 | dampers or auxiliary functions               |
+| 4 to 7   | bow press (descent)                          |
+| 8 to 15  | auxiliary functions                          |
 
 The `OE` output of the PCA9685 must be connected to a safety pin in order to immediately neutralize the servos.
 
@@ -567,7 +567,7 @@ The user must be able to test:
 * each motor;
 * each sensor;
 * each finger;
-* each pick;
+* each bow motor;
 * each note;
 * each string;
 * a chord;
@@ -932,7 +932,7 @@ delay after press
 delay after release
 ```
 
-## 15.2 Individual pick
+## 15.2 Bow motor & bow-press servo
 
 The pick must have:
 
@@ -953,7 +953,7 @@ For an open string:
 ```text
 finger raised
 motor possibly moved to a safety position
-plucking allowed directly
+bowing allowed directly
 ```
 
 An advanced option may allow using the finger on fret zero for a specific mechanism.
@@ -1026,7 +1026,7 @@ Order of priorities:
 
 1. play as many notes as possible;
 2. respect the mechanical limits;
-3. minimize the time before plucking;
+3. minimize the time before bowing;
 4. minimize movements;
 5. keep fingers that are already well positioned;
 6. limit direction changes.
@@ -1119,7 +1119,7 @@ remaining distance
 HOME status
 LIMIT status
 finger status
-pick status
+bow state
 last fault
 ```
 
@@ -1199,7 +1199,7 @@ The panic must:
 
 * flush the MIDI queue;
 * cancel all movements;
-* cancel all plucks;
+* cancel all bow-starts;
 * raise the fingers;
 * neutralize the servos;
 * disable the motors;
@@ -1284,8 +1284,8 @@ firmware/
 ├── actuators/
 │   ├── ServoManager
 │   ├── FingerActuator
-│   ├── PluckActuator
-│   └── DamperActuator
+│   ├── BowPressActuator
+│   └── BowMotorBank 
 ├── configuration/
 │   ├── Profile
 │   ├── ProfileValidator
@@ -1314,7 +1314,8 @@ firmware/
 * one stepper motor;
 * one HOME sensor;
 * one finger servo;
-* one pluck servo;
+* one bow-press servo;
+* one bow motor;
 * Wi-Fi MIDI test;
 * complete state machine;
 * panic.
@@ -1381,7 +1382,7 @@ The project will be considered functional when:
 10. the axes perform reliable homing;
 11. open strings are played without finger pressing;
 12. a Note Off cancels an attack being prepared;
-13. no delayed pluck is executed after a cancellation;
+13. no delayed bow-start is executed after a cancellation;
 14. six axes can be controlled simultaneously;
 15. profiles can be saved, exported and restored;
 16. the panic neutralizes all actuators;
@@ -1448,7 +1449,7 @@ Name: Stepper-Bowed-Strings-GMB
 
 Project developed from scratch
 
-Plucked or strummed string instruments only
+Bowed string instruments only
 
 1 to 6 strings
 

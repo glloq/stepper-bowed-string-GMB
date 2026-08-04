@@ -274,7 +274,7 @@ Fret zero must automatically result in:
 ```text
 finger raised
 no press on the string
-pluck of the open string
+bowing of the open string
 ```
 
 ---
@@ -454,7 +454,7 @@ Recommended value:
 3. validate the note/string/fret consistency ;
 4. remove the selection from the queue ;
 5. prepare the motor ;
-6. schedule the press and the pluck.
+6. schedule the press and the bow-start.
 ```
 
 This method remains functional if the events of a chord are grouped by type.
@@ -480,7 +480,7 @@ motor movement
         ↓
 Note On received
         ↓
-press and pluck when the position is ready
+press and bow when the position is ready
 ```
 
 This behavior must be configurable:
@@ -499,11 +499,11 @@ The `Note On` keeps its role as the musical trigger.
 
 If the motor has not yet reached the fret at the time of the `Note On`:
 
-* the pluck must be put on hold;
+* the bow-start must be put on hold;
 * the stepper motor must finish its movement;
 * the finger must be pressed;
-* the pluck must then be executed;
-* no anticipated pluck must be produced.
+* the bow must then be engaged;
+* no anticipated bowing must be produced.
 
 ---
 
@@ -632,7 +632,7 @@ Fret CC :
 [ 21 ]
 
 String numbering :
-[ 1 to 6 ]
+[ 1 to 4 ]
 
 String order :
 [ Normal ]
@@ -712,7 +712,7 @@ selection validated
 axis moving
 position reached
 finger pressed
-string plucked
+string bowed
 ```
 
 ---
