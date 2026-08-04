@@ -2,7 +2,7 @@
 
 ## 1. Objective
 
-Stepper-Plucked-Strings-GMB must automatically communicate its capabilities to General-Midi-Boop.
+Stepper-Bowed-Strings-GMB must automatically communicate its capabilities to General-Midi-Boop.
 
 The announced information must be generated from the active profile stored in the ESP32.
 
@@ -383,7 +383,7 @@ F0 7D 00 07 01
 F7
 ```
 
-For Stepper-Plucked-Strings-GMB:
+For Stepper-Bowed-Strings-GMB:
 
 ```text
 is_fretless = 0

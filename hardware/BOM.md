@@ -1,6 +1,6 @@
 # Bill of materials
 
-Reference bill of materials for **Stepper-Plucked-Strings-GMB**
+Reference bill of materials for **Stepper-Bowed-Strings-GMB**
 (SPECIFICATION.md §26). Quantities scale with the string count *N* (1–6). This is the
 prototype/reference build with **pluggable driver modules** (§7.2); the
 integrated PCB variant is a Phase 5 deliverable (see `hardware/pcb/`).

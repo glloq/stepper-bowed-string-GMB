@@ -2,7 +2,7 @@
 
 ## 1. Objective
 
-Stepper-Plucked-Strings-GMB must be able to receive an explicit indication of the string and fret to use before a note is triggered.
+Stepper-Bowed-Strings-GMB must be able to receive an explicit indication of the string and fret to use before a note is triggered.
 
 This function allows the main control system, in particular General-Midi-Boop, to directly transmit a tablature position:
 

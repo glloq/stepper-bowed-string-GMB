@@ -1,4 +1,4 @@
-# MIDI Protocol — Stepper-Plucked-Strings-GMB
+# MIDI Protocol — Stepper-Bowed-Strings-GMB
 
 > Sources: `SPECIFICATION.md` §8 · `STRING_FRET_SELECTION.md` (full) · `SYSEX_CAPABILITIES.md` (full).
 > Code: `firmware/src/core/midi/{MidiEvent.h, StringFretSelector.*}`, `core/gmb/{GmbSysEx.*, Capabilities.*}`.

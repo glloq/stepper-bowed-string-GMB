@@ -1,4 +1,4 @@
-# Architecture — Stepper-Plucked-Strings-GMB
+# Architecture — Stepper-Bowed-Strings-GMB
 
 > Reference document: [`SPEC_INDEX.md`](SPEC_INDEX.md) (source: `SPECIFICATION.md` §23, §24).
 > Related documents: [`PIN_CONFIGURATION.md`](PIN_CONFIGURATION.md) · [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md) · [`WEB_INTERFACE.md`](WEB_INTERFACE.md) · [`CALIBRATION.md`](CALIBRATION.md) · [`SAFETY.md`](SAFETY.md)

@@ -1,4 +1,4 @@
-# Specification — Stepper-Plucked-Strings-GMB
+# Specification — Stepper-Bowed-Strings-GMB
 
 **Version:** 1.0
 **Status:** initial specification
@@ -12,7 +12,7 @@
 
 # 1. Project purpose
 
-Stepper-Plucked-Strings-GMB is a modular MIDI controller intended for plucked or strummed string instruments.
+Stepper-Bowed-Strings-GMB is a modular MIDI controller intended for plucked or strummed string instruments.
 
 The system must move a single mechanical finger along each string in order to select the note to play.
 
@@ -51,7 +51,7 @@ The project must remain specialized in order to avoid an overly complex universa
 The note-selection technologies will be split across separate projects:
 
 ```text
-Stepper-Plucked-Strings-GMB
+Stepper-Bowed-Strings-GMB
 └── a stepper motor moves a single finger per string
 
 Servo-Plucked-Strings-GMB
@@ -64,7 +64,7 @@ Solenoid-Plucked-Strings-GMB
 This specification concerns only:
 
 ```text
-Stepper-Plucked-Strings-GMB
+Stepper-Bowed-Strings-GMB
 ```
 
 A common base may later be extracted for:
@@ -330,7 +330,7 @@ The ESP32 creates its own Wi-Fi network.
 
 ```text
 Default SSID:
-Stepper-Plucked-Strings-GMB
+Stepper-Bowed-Strings-GMB
 
 Configuration address:
 displayed local address or captive portal
@@ -1136,7 +1136,7 @@ Simplified example:
 
 ```json
 {
-  "project": "Stepper-Plucked-Strings-GMB",
+  "project": "Stepper-Bowed-Strings-GMB",
   "profileVersion": 1,
   "instrument": {
     "name": "Ukulele 4 strings",
@@ -1407,7 +1407,7 @@ example instrument profiles
 # 27. Recommended repository organization
 
 ```text
-Stepper-Plucked-Strings-GMB/
+Stepper-Bowed-Strings-GMB/
 ├── firmware/
 ├── web-interface/
 ├── hardware/
@@ -1434,7 +1434,7 @@ Stepper-Plucked-Strings-GMB/
 # 28. Initial decisions adopted
 
 ```text
-Name: Stepper-Plucked-Strings-GMB
+Name: Stepper-Bowed-Strings-GMB
 
 Project developed from scratch
 

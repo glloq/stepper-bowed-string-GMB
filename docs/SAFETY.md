@@ -1,4 +1,4 @@
-# Safety — Stepper-Plucked-Strings-GMB
+# Safety — Stepper-Bowed-Strings-GMB
 
 > Sources: `SPECIFICATION.md` §21, §22 · Code: `core/safety/SafetyManager.{h,cpp}`.
 > Related documents: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`CALIBRATION.md`](CALIBRATION.md) · [`WEB_INTERFACE.md`](WEB_INTERFACE.md).
@@ -153,10 +153,11 @@ firmware must:
 
 * flush the MIDI queue;
 * cancel all movements;
-* cancel all plucks;
-* lift the fingers;
+* cancel every armed bow-start;
+* lift the fingers **and the bow wheels**;
 * neutralize the servos;
-* disable the motors;
+* stop every bow motor and cut the shared H-bridge enable (`MOTOR_EN`);
+* disable the stepper drivers;
 * record the cause.
 
 The `StringController` command-identifier mechanism guarantees that no deferred
@@ -207,6 +208,7 @@ Recommended rails:
 | Rail | Usage |
 | ---- | ----- |
 | 24 V | stepper motors |
+| 6 to 12 V | bow (friction-wheel) DC motors, via the H-bridges |
 | 5 to 7.4 V | servomotors |
 | 5 V | logic |
 | 3.3 V | ESP32-S3 |
@@ -214,10 +216,33 @@ Recommended rails:
 Requirements:
 
 * **separate** servo power supply;
-* motor fuse; servo fuse;
+* **separate** bow-motor supply, sized for all wheels stalling at once;
+* motor fuse; servo fuse; bow-motor fuse;
 * reverse-polarity protection;
-* TVS on the motor rail;
-* capacitors near the drivers; a reserve capacitor near the PCA9685;
+* TVS on the motor and bow-motor rails;
+* capacitors near the drivers and each H-bridge; a reserve capacitor near the PCA9685;
 * structured common ground;
 * lockable connectors;
-* **no servo powered from the ESP32 regulator**.
+* **no servo or bow motor powered from the ESP32 regulator**.
+
+---
+
+## 7. Bowing-specific hazards
+
+A friction-wheel bow is a small, always-on spinning machine sitting on a taut
+string. Beyond the generic actuator safety above:
+
+* The shared `MOTOR_EN` line (H-bridge `nSLEEP`/`STBY`) is the software cut for
+  **all** bow motors at once; a panic / E-stop drives it low and the wheels
+  coast (or brake, per `brakeOnStop`). Wire a **hardware** cut of the bow-motor
+  supply into the physical E-stop as well — a stuck PWM must not keep a wheel
+  turning.
+* A wheel is only lowered onto a string while a note sounds; a Note Off, fault,
+  panic or E-stop lifts it (the descent servo returns to `restUs`). If a
+  bow-press servo cannot be driven, the axis is faulted rather than left with a
+  wheel spinning on the string.
+* Keep the PWM frequency inaudible (20 kHz default) and above the wheel's
+  mechanical resonance; a whining motor usually means the duty floor
+  (`minDutyPercent`) is too low to overcome the wheel's dead-band.
+* Rosin dust and a fast wheel are a pinch/abrasion hazard — keep fingers clear
+  and fit a guard before running unattended.

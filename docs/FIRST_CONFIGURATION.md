@@ -1,4 +1,4 @@
-# First configuration guide — Stepper-Plucked-Strings-GMB
+# First configuration guide — Stepper-Bowed-Strings-GMB
 
 > Source: `SPECIFICATION.md` §8, §10, §26 (first configuration guide).
 > Related documents: [`WEB_INTERFACE.md`](WEB_INTERFACE.md) · [`PIN_CONFIGURATION.md`](PIN_CONFIGURATION.md) · [`CALIBRATION.md`](CALIBRATION.md) · [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md) · [`SAFETY.md`](SAFETY.md).
@@ -24,7 +24,7 @@ the **simplified mode** of the Web interface. No code modification is needed.
 At first power-on, the ESP32 starts in **access-point mode**:
 
 ```text
-Default SSID: Stepper-Plucked-Strings-GMB
+Default SSID: Stepper-Bowed-Strings-GMB
 ```
 
 1. Connect your phone/computer to this Wi-Fi network.

@@ -1,6 +1,6 @@
 # Mechanics — reference architecture
 
-Reference mechanical architecture for **Stepper-Plucked-Strings-GMB**
+Reference mechanical architecture for **Stepper-Bowed-Strings-GMB**
 (SPECIFICATION.md §5), and how each mechanical parameter maps to the instrument-profile
 fields (`firmware/src/core/motion/StepperAxis.h`, `instrument-profiles/`).
 

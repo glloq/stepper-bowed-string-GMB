@@ -1,4 +1,4 @@
-# Web Interface — Stepper-Plucked-Strings-GMB
+# Web Interface — Stepper-Bowed-Strings-GMB
 
 > Sources: `SPECIFICATION.md` §9, §10, §18, §19, §20 · `STRING_FRET_SELECTION.md` §14–16 · `SYSEX_CAPABILITIES.md` §17–18.
 > Related documents: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`PIN_CONFIGURATION.md`](PIN_CONFIGURATION.md) · [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md) · [`FIRST_CONFIGURATION.md`](FIRST_CONFIGURATION.md).
@@ -140,7 +140,7 @@ restore, set the startup profile. **JSON** exchange format:
 
 ```json
 {
-  "project": "Stepper-Plucked-Strings-GMB",
+  "project": "Stepper-Bowed-Strings-GMB",
   "profileVersion": 1,
   "instrument": { "name": "Ukulele 4 strings", "stringCount": 4 },
   "board": { "profile": "esp32-s3-devkitc-1", "reserveUsb": true, "automaticPinAssignment": true },

@@ -1,4 +1,4 @@
-# Calibration procedure — Stepper-Plucked-Strings-GMB
+# Calibration procedure — Stepper-Bowed-Strings-GMB
 
 > Sources: `SPECIFICATION.md` §12, §13, §14, §15 · Code: `core/motion/{StepperAxis.*, HomingController.*}`, `core/Types.*`, `core/configuration/Profile.h`.
 > Related documents: [`WEB_INTERFACE.md`](WEB_INTERFACE.md) (wizard §10) · [`SAFETY.md`](SAFETY.md) · [`FIRST_CONFIGURATION.md`](FIRST_CONFIGURATION.md).
@@ -157,16 +157,22 @@ applied by `clampToLimits`).
 
 ---
 
-## 4. Servo calibration (§15)
+## 4. Servo, bow-press & bow-motor calibration (§15)
 
-Each servo uses pulses calibrated in microseconds (`ServoConfig`):
+A bowed string has two servos — a **finger** (pitch stop) and a mandatory
+**bow-press** descent servo — plus one **bow motor** (a friction wheel on an
+H-bridge).
+
+### 4.0 Servo config (`ServoConfig`)
+
+Each servo uses pulses calibrated in microseconds:
 
 ```cpp
 enum class ServoSource : uint8_t { Pca = 0, DirectGpio = 1 };
 
 struct ServoConfig {
     bool enabled;
-    std::string function;         // "finger"/"pluck"/"strum"/"strumLift"/"damper"/"sharedDamper"/"aux"
+    std::string function;         // "finger" / "bowPress" / "aux"
     int8_t stringIndex;           // owner string, -1 = shared/global
 
     ServoSource source;           // PCA9685 OR direct ESP32 GPIO
@@ -175,110 +181,107 @@ struct ServoConfig {
     int8_t  gpio;                 // ESP32 GPIO            (source == DirectGpio)
 
     uint16_t pulseMinUs, pulseMaxUs;
-    uint16_t restUs, activeUs;    // rest / active position
+    uint16_t restUs;              // finger up / bow wheel lifted
+    uint16_t activeUs;            // finger pressed / full bow pressure
+    uint16_t contactUs;           // bowPress: lightest audible contact (intensity 0)
     bool inverted;
-    uint16_t travelMs;            // travel time
-    uint16_t settleMs;            // settle time
-    bool disableAtRest;           // disable at rest
-
-    // Strum / pluck stroke shaping (per servo).
-    uint16_t engageDelayMs;       // strumLift: pause after the lift is down, before the stroke
-    bool     alternateDirection;  // alternate down/up stroke on successive strikes
-    uint16_t activeAltUs;         // up-stroke active pulse (0 = mirror activeUs about restUs)
-    uint16_t strokeMs;            // stroke engage time before return (0 = use travelMs)
-    uint16_t minStrikeUs;         // guaranteed minimum strike depth (0 = velocity-only)
+    uint16_t travelMs, settleMs;
+    bool disableAtRest;
+    uint16_t engageDelayMs;       // bowPress: pause after the wheel is down, before the motor spins up
 };
 ```
 
-### 4.0a Strum / pluck stroke shaping
+The **finger** is a binary press (`restUs` up, `activeUs` down). The
+**bow-press / descent servo** is proportional: `restUs` lifts the wheel clear of
+the string, `contactUs` is the lightest audible touch and `activeUs` is maximum
+pressure. While a note sounds the pulse is mapped between `contactUs` and
+`activeUs` by the note's intensity (`bowPressureTargetUs`, unit-tested), so
+`contactUs` should sit between `restUs` and `activeUs`.
 
-For the strike roles (`pluck`, `strum`) MIDI velocity scales the
-depth between `restUs` and `activeUs`. Five extra fields control the *gesture*:
+### 4.0a Bow-motor config (`BowMotorConfig`)
 
-* **`alternateDirection` + `activeAltUs`** — successive strokes rake the string
-  in opposite directions (down, up, down…). The up-stroke drives to `activeAltUs`,
-  or, when that is `0`, to the mirror of `activeUs` about `restUs`. Applies to the
-  per-string striker (each servo keeps its own stroke parity, reset on neutralise /
-  profile activation).
-* **`strokeMs`** — how long the stroke stays engaged before it returns to rest,
-  i.e. the stroke's *speed*, independent of `travelMs` (which remains the return /
-  settle base). `0` keeps the legacy behaviour (`travelMs`).
-* **`minStrikeUs`** — a floor on the strike depth toward the active side so a
-  soft (low-velocity) note still catches the string. `0` disables it.
-* **`engageDelayMs`** — on a `strumLift` servo, an extra pause after the lift has
-  lowered the strum servo onto the string, before the stroke fires. Lets the
-  string/lift settle so the attack is clean.
+One friction-wheel motor per string, driven through an H-bridge:
 
-### 4.0b Playback timing / latency (global, `MidiConfig`)
+```cpp
+enum class BowDriveMode : uint8_t { InIn = 0, PhaseEnable = 1 };
 
-Three global knobs manage the delay between a MIDI Note On and the sound, and how
-much the mechanics anticipate to keep that delay small:
+struct BowMotorConfig {
+    bool enabled;
+    int8_t stringIndex;
+    BowDriveMode driveMode;       // InIn: BOWA/BOWB both PWM; PhaseEnable: BOWA=PWM, BOWB=direction
+    uint32_t pwmFreqHz;           // 20 kHz default (inaudible)
+    uint8_t pwmResolutionBits;    // LEDC duty resolution (10)
+    uint8_t minDutyPercent;       // duty floor so the wheel turns past its dead-band (25)
+    uint8_t maxDutyPercent;       // top bow speed (100)
+    bool reverse;                 // invert the default rotation direction
+    bool brakeOnStop;             // brake (both inputs high) vs coast on note-off
+    uint16_t spinUpMs, spinDownMs;// speed slew on engage / release
+};
+```
 
-* **`noteExecutionDelayMs`** — a **fixed** delay from Note On reception to the note
-  actually sounding. The carriage move, finger press and strum prep all happen
-  inside this window, so the note plays at a predictable, constant latency
-  (`reception + delay`) as long as the mechanics can be ready in time. `0` = play
-  as soon as ready (variable latency).
+The motor's GPIOs live in the pin table (`BOWA{n}`/`BOWB{n}` + the shared
+`MOTOR_EN`), not here — see [`PIN_CONFIGURATION.md`](PIN_CONFIGURATION.md). The
+note's intensity is mapped into `[minDutyPercent, maxDutyPercent]`
+(`bowSpeedDuty`, unit-tested): a non-zero floor keeps the wheel turning even at
+pianissimo.
+
+### 4.0b Bow dynamics (velocity, and continuous modulation)
+
+A bowed note is excited continuously, so unlike a plucked one it is shaped
+**while it sounds**, along two axes:
+
+* **Bow speed** — the wheel's PWM duty (louder / brighter when faster).
+* **Bow pressure** — the descent servo's position (louder, and grittier when
+  heavier; too much chokes the string).
+
+MIDI **velocity** sets the note's *attack* intensity (through the velocity
+curve). When `midi.continuousDynamics` is on, **CC7** (volume), **CC11**
+(expression), **CC1** (modulation) and **channel aftertouch** re-evaluate that
+intensity for every sounding string in real time — the bow speed and pressure
+follow, giving a true bowed crescendo on a held note. Turn `continuousDynamics`
+off to freeze each note's dynamics at its attack velocity.
+
+### 4.0c Playback timing / latency (global, `MidiConfig`)
+
+Three global knobs manage the delay between a MIDI Note On and the sound:
+
+* **`noteExecutionDelayMs`** — a **fixed** delay from Note On to the note actually
+  sounding; the carriage move, finger press and bow descent all happen inside this
+  window, for a predictable, constant latency. `0` = play as soon as ready.
 * **`fingerLeadMs`** — begin the finger descent up to this long **before** the
-  carriage is estimated to reach the fret, so the finger arrives on the string
-  around arrival instead of only starting to descend then. Set too large it can
-  drag the finger during the slide, so it is an opt-in value to tune on the bench
-  (`0` = press only after arrival, the safe default).
-* **`strumLeadMs`** — begin lowering the strum lift up to this long **before** the
-  string becomes ready, so the strummer is already engaged when the strike time
-  comes. `0` = lower the lift only once the string is ready.
+  carriage is estimated to reach the position (`0` = press on arrival, the safe
+  default; too large it can drag the finger).
+* **`bowLeadMs`** — begin lowering the wheel to a light contact up to this long
+  **before** the note starts, so it is already touching when bowing begins.
 
-`fingerLeadMs` and `strumLeadMs` shrink the *minimum* achievable
-`noteExecutionDelayMs`; all three default to `0` (strictly sequential, safe).
+All three default to `0` (strictly sequential, safe).
 
-### 4.0 Signal source: PCA9685 or direct GPIO
+### 4.0d Signal source: PCA9685 or direct GPIO
 
-The system works **with or without a PCA9685**. Each servo independently chooses
-its source:
-
-* **PCA9685** — up to **four boards** (`pcaBoard` 0–3, addresses 0x40–0x43),
-  i.e. **64 channels** in total; each servo indicates its board and its `channel`
-  (0–15). Ideal when the number of servos exceeds the free PWM pins.
-* **Direct GPIO** — the servo is driven by a free pin on the ESP32-S3
-  (LEDC PWM 50 Hz). Useful without a PCA or for just a few servos.
-
-The two modes can be **mixed** on the same instrument. The validator rejects: a
-PCA channel (board + channel) used twice, a direct GPIO that is reserved or in
-conflict with a motor signal or another servo, and a per-string role pointing to
-a nonexistent string.
+Each servo independently chooses **PCA9685** (up to four boards, 64 channels) or a
+**direct ESP32 GPIO** (LEDC 50 Hz), and the two can be mixed. On a full 4-string
+bowed build the eight LEDC channels are taken by the bow motors, so the servos
+ride the PCA9685 — the recommended layout. The validator rejects a PCA channel
+used twice, a direct GPIO reserved or clashing with a motor/servo signal, a
+per-string role pointing at a nonexistent string, and any configuration whose
+direct servos + bow-motor PWM channels exceed the eight LEDC channels.
 
 ### 4.1 Per-string roles
 
-Each string (1 to 6) can have its own servos:
+| Role       | Function                                                     |
+| ---------- | ------------------------------------------------------------ |
+| `finger`   | press/stop the string at the position (pitch)                |
+| `bowPress` | lower the friction wheel and set the bow pressure (required) |
 
-| Role     | Function                                             |
-| -------- | ---------------------------------------------------- |
-| `finger` | finger press on the fret                             |
-| `pluck`  | individual plectrum                                  |
-| `strum`  | string-specific strumming                            |
-| `damper` | string-specific damper / mute                        |
+`aux` (`stringIndex = -1`) is a shared / auxiliary actuator. A positioned string
+(`maxFret > 0`) needs a `finger`; every enabled string needs a `bowPress`. A note
+ends by lifting the wheel — there is no separate damper.
 
-**Shared** roles (`sharedDamper`, `aux`, `stringIndex = -1`) allow a mechanism
-that spans several strings. The firmware lifts the finger and actuates the
-string's damper when the note is released.
+### 4.2 Finger & open string (§15.1 / §15.3)
 
-### 4.1 Finger (§15.1)
+Lifted / pressed positions, delay after pressing / releasing. An open string
+(position 0) plays with the finger lifted; the wheel still lowers and bows it.
 
-Lifted / pressed positions, delay after pressing, delay after releasing. The open
-string (fret 0): finger lifted, motor possibly in a safe position, direct plucking
-allowed.
-
-### 4.2 Individual plectrum (§15.2)
-
-Left / right / rest positions, automatic alternation, min/max travel, movement
-speed or delay.
-
-### 4.3 Open string (§15.3)
-
-Finger lifted, motor possibly moved to a safe position, plucking allowed directly.
-Advanced option: use the finger on the zero fret for a specific mechanism.
-
-Recommended layout on a first PCA9685 board (16 channels): 0–5 finger presses,
-6–11 individual plucking, 12–15 dampers / auxiliaries. Beyond
-that, add boards (`pcaBoard` 1–3) or servos on direct GPIO. Each PCA9685's `/OE`
-output is wired to a safety pin — see [`SAFETY.md`](SAFETY.md).
+Recommended layout on a first PCA9685 board (16 channels): 0–3 finger presses,
+4–7 bow-press (descent) servos, 8–15 auxiliaries. Each PCA9685's `/OE` output is
+wired to a safety pin — see [`SAFETY.md`](SAFETY.md).

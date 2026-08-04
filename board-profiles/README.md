@@ -1,7 +1,7 @@
 # Board profiles
 
 Machine-readable GPIO capability maps for the ESP32 boards supported by
-**Stepper-Plucked-Strings-GMB**. The web configurator and the firmware pin
+**Stepper-Bowed-Strings-GMB**. The web configurator and the firmware pin
 manager use these files to filter which GPIO may carry which signal, per board
 and per module variant (SPECIFICATION.md §11).
 
