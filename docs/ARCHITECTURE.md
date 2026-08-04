@@ -86,10 +86,10 @@ firmware/                        Specification §23             Implemented (cor
 │   ├── MotionPlanner            trapezoidal profile (accel)   core/motion/MotionPlanner.{h,cpp}
 │   └── HomingController         non-blocking homing           core/motion/HomingController.{h,cpp}
 ├── actuators/
-│   ├── ServoManager             PCA9685                       ServoConfig (core/configuration)
+│   ├── ServoBank                PCA9685 / direct GPIO servos  ServoConfig (core/configuration)
 │   ├── FingerActuator           finger servo                  ServoConfig function="finger"
-│   ├── PluckActuator            pluck servo                   ServoConfig function="pluck"
-│   └── DamperActuator           damper                        ServoConfig function="damper"
+│   ├── BowPressActuator         descent servo (bow pressure)  ServoConfig function="bowPress"
+│   └── BowMotorBank             friction-wheel motors (H-bridge/LEDC)  BowMotorConfig
 ├── configuration/
 │   ├── Profile                  profile (source of truth)     core/configuration/Profile.{h,cpp}
 │   ├── ProfileValidator         validation                    core/configuration/ProfileValidator.{h,cpp}
@@ -152,12 +152,12 @@ NoteAllocator               (chooses the best string, groups chords,
         ▼
 StringController[c]          (non-blocking state machine, 1 per string)
    DISABLED → HOMING → IDLE → RELEASING_FINGER → MOVING →
-   PRESSING_FINGER → SETTLING → READY_TO_PLUCK → PLUCKING →
-   SUSTAINING → DAMPING (→ IDLE)     |  CANCELLING  |  FAULT
+   PRESSING_FINGER → SETTLING → READY_TO_BOW → BOWING →
+   RELEASING_BOW (→ IDLE)     |  CANCELLING  |  FAULT
         │                                   │
         ▼                                   ▼
-StepperAxis / HomingController        ServoManager (PCA9685)
-   (mm ↔ steps, fret positions)          finger / pluck / damper
+StepperAxis / HomingController        ServoBank + BowMotorBank
+   (mm ↔ steps, positions)           finger / bow-press servo / bow motor
 ```
 
 Key points of the flow:
@@ -171,7 +171,7 @@ Key points of the flow:
   [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md).
 * **Command identifier.** Each `noteOn(fret)` returns a fresh `commandId`;
   any deferred action tagged with an old id is ignored. This prevents a
-  pluck after a Note Off, a delayed press, the execution of a stale position,
+  bow-start after a Note Off, a delayed press, the execution of a stale position,
   or an attack after a panic (specification §16).
 * **Reliable Note Off.** The actual assignment of a Note On is memorized
   (`ActiveNote`) to release the correct string, even in a chord or with repeated
@@ -224,11 +224,12 @@ in [`MIDI_PROTOCOL.md`](MIDI_PROTOCOL.md#3-protocole-sysex-gmb).
 | `instrument` | `InstrumentInfo` | name, type, GM program, number of strings, capo, transposition |
 | `boardIdentifier` / `reserveUsb` / `pins` | — | board, USB reservation, GPIO assignment |
 | `network` | `NetworkConfig` | AP/station mode, SSID, hostname, static IP |
-| `midi` | `MidiConfig` | channel, Omni, transposition, chord window, velocity curve, pedal |
-| `selector` | `SelectorConfig` | string/fret selection (CC20/CC21, mode, timeout, FIFO…) |
+| `midi` | `MidiConfig` | channel, Omni, transposition, chord window, velocity curve, continuous dynamics, pedal |
+| `selector` | `SelectorConfig` | string/position selection (CC20/CC21, mode, timeout, FIFO…) |
 | `strings` | `vector<AxisConfig>` | geometry/motor per string |
 | `homing` | `vector<HomingConfig>` | homing per axis |
-| `servos` | `vector<ServoConfig>` | servos (finger/pluck/damper/aux) |
+| `servos` | `vector<ServoConfig>` | servos (finger/bowPress/aux) |
+| `bowMotors` | `vector<BowMotorConfig>` | one friction-wheel bow motor per string |
 | `capabilitiesRevision` | `uint32_t` | revision counter (Block 8 notification) |
 
 `Profile::instrumentView()` derives from it an `InstrumentView` shared by the
@@ -240,7 +241,7 @@ string/fret selector and the capabilities generator.
 
 | Phase | Objective | Key deliverables |
 | ----- | ----- | -------------- |
-| **1 — Single-string prototype** | ESP32-S3, Wi-Fi, minimal UI, 1 motor, 1 HOME sensor, 1 finger servo, 1 pluck servo, Wi-Fi MIDI test, complete state machine, panic | state machine, homing, panic |
+| **1 — Single-string prototype** | ESP32-S3, Wi-Fi, minimal UI, 1 stepper, 1 HOME sensor, 1 finger servo, 1 bow-press servo, 1 bow motor, Wi-Fi MIDI test, complete state machine, panic | state machine, homing, panic |
 | **2 — Intuitive configuration** | wizard, board profile, automatic GPIO assignment, conflict validation, motor/servo calibration, JSON import/export | `BoardProfile`, `PinManager`, `Profile`, wizard |
 | **3 — Multi-string** | 4 then 6 axes, PCA9685, parallel homing, note allocation, chords, per-string diagnostics | `NoteAllocator`, parallel homing |
 | **4 — Advanced playing** | tremolo, damping, sustain pedal, velocity curves, saturation strategies | curves |

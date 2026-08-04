@@ -117,9 +117,9 @@ struct SelectorConfig {
   The numbering (`ZeroBased`/`OneBased`), the order (normal/reversed) and a
   custom `mapping[]` table (logical index → physical axis) are applied.
   `mapStringValue(rawValue)` returns the physical axis index or -1.
-* **Fret**: `logical fret = CC value + offset`. `mapFretValue(rawValue)` returns
-  the fret or -1. **Fret 0 automatically results in: finger raised, no press,
-  plucking the open string.**
+* **Position**: `logical position = CC value + offset`. `mapFretValue(rawValue)`
+  returns the position or -1. **Position 0 automatically results in: finger
+  raised, no press, bowing the open string.**
 
 Normal vs. reversed order example (4 strings):
 
@@ -165,7 +165,7 @@ selection3 = string 4/fret 7; then Note 42 → sel1, Note 55 → sel2, Note 64 �
   **oldest selection without a fret**, add the fret to it, mark it complete.
 * **Note On** (`onNoteOn`): look for the **oldest complete selection on the
   channel**, associate the note, validate consistency, remove it from the queue,
-  prepare the engine, schedule the press and pluck. Returns:
+  prepare the engine, schedule the press and bow-start. Returns:
 
 ```cpp
 struct NoteResolution {
@@ -182,9 +182,27 @@ struct NoteResolution {
 If `prepareOnCompleteSelection` (enabled by default), as soon as a string/fret
 pair is complete, the controller can start the mechanical preparation (finger
 release, motor movement) **without waiting for the Note On**. The Note On retains
-its role as the musical trigger. If the motor has not reached the fret at the
-moment of the Note On: the pluck is queued, the motor finishes, the finger
-presses, then the pluck executes — **no early plucking**.
+its role as the musical trigger. If the motor has not reached the position at the
+moment of the Note On: the bow-start is queued, the motor finishes, the finger
+presses, then the bow engages — **no early bowing**.
+
+### 2.8b Continuous dynamics (bowed expression)
+
+Unlike a plucked note, a bowed note is excited continuously, so it can be shaped
+**while it sounds**. MIDI **velocity** sets the attack level; when
+`midi.continuousDynamics` is enabled the controller re-evaluates every sounding
+string's intensity from the live expression controllers and the mechanical layer
+tracks it (bow speed via the H-bridge PWM, bow pressure via the descent servo):
+
+| Control | Effect on a sounding note |
+| ------- | ------------------------- |
+| **CC7** volume | scales the note's level |
+| **CC11** expression | scales the note's level |
+| **CC1** modulation | swells the note upward toward full (a crescendo) |
+| **channel aftertouch** | swells the note upward (a "lean-in") |
+
+This is the mechanism behind a bowed crescendo / diminuendo on a held note.
+Disable `continuousDynamics` to freeze each note at its attack velocity.
 
 ### 2.10 Note / string / fret consistency (`NotePositionPolicy`)
 
@@ -354,8 +372,8 @@ string`. The **union** of all playable notes is built (bounded 0–127).
 #### Polyphony (§6)
 
 `polyphony = number of active and functional strings` by default, or a custom
-value (`polyphonyOverride ≥ 0`). Examples: 6 strings with individual picks → 6;
-6 strings with constraints limiting to 4 → configured to 4.
+value (`polyphonyOverride ≥ 0`). Examples: 4 strings each with their own bow → 4;
+4 strings with constraints limiting to 3 → configured to 3.
 
 #### Announced controllers (§7)
 
@@ -363,10 +381,11 @@ Only the CCs that are **actually enabled** are announced, sorted:
 
 | CC | Function | Condition |
 | -: | -------- | --------- |
+| 1 | modulation (live bow swell) | if `midi.continuousDynamics` |
 | 7 | volume | always |
 | 11 | expression | always |
 | String CC | string selection | if `selector.enabled` (configured number, e.g. 24) |
-| Fret CC | fret selection | if `selector.enabled` (e.g. 25) |
+| Fret CC | position selection | if `selector.enabled` (e.g. 25) |
 | 64 | sustain | if `midi.sustainPedal` |
 | 120 | immediate sound off | always |
 | 123 | all notes off | always |
