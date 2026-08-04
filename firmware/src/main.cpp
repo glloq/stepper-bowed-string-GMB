@@ -1,4 +1,4 @@
-// Stepper-Plucked-Strings-GMB — ESP32-S3 firmware entry point.
+// Stepper-Bowed-Strings-GMB — ESP32-S3 firmware entry point.
 //
 // Wires the pure-core logic (src/core/) to the ESP32 platform adapters
 // (src/platform/esp32/). The core is unit-tested on the host; this file is the
@@ -19,6 +19,7 @@
 #include <cmath>
 #include <vector>
 
+#include "core/configuration/BowControl.h"
 #include "core/configuration/Profile.h"
 #include "core/configuration/ProfileValidator.h"
 #include "core/gmb/GmbSysExService.h"
@@ -26,6 +27,7 @@
 #include "core/midi/MidiEvent.h"
 #include "core/motion/HomingController.h"
 #include "core/safety/SafetyManager.h"
+#include "platform/esp32/BowMotorBank.h"
 #include "platform/esp32/MidiWifi.h"
 #include "platform/esp32/Net.h"
 #include "platform/esp32/ProfileStorage.h"
@@ -44,6 +46,7 @@ InstrumentController g_instrument;
 GmbSysExService g_sysex;
 StepperBank g_steppers;
 ServoBank g_servos;
+BowMotorBank g_bow;   // one friction-wheel "bow" motor per string (H-bridge)
 Net g_net;
 MidiWifi g_midi;
 WebApi g_web;
@@ -80,21 +83,21 @@ std::vector<TestNoteOff> g_testOffs;
 // Per-string non-blocking playback scheduler.
 struct StringSched {
     enum Phase { Idle, WaitStopped, ReleasingFinger, MovingToFret, PressingFinger,
-                 Settling, Ready, StrumLiftDown, StrumLiftHold }
+                 Settling, Ready, Bowing }
         phase = Idle;
     uint32_t phaseStartMs = 0;
     uint32_t commandId = 0;
     int fingerIndex = -1;
-    uint32_t dampUntilMs = 0;   // don't move until the damper has acted (replace)
+    uint32_t dampUntilMs = 0;   // don't move until the bow wheel has lifted (replace)
     uint32_t moveDeadlineMs = 0;  // fault the axis if the move isn't done by then
-    int liftIndex = -1;    // engaged strum-lift servo during a stroke (-1 = none)
-    int strikeIndex = -1;  // striker to fire once the lift has lowered
+    int bowIndex = -1;          // this string's bow-press (descent) servo (-1 = none)
+    int motorIndex = -1;        // this string's bow motor in g_bow (-1 = none)
+    double lastIntensity = -1.0;  // last intensity pushed to the bow (throttles writes)
+    bool bowEngaged = false;    // the wheel has been lowered onto the string
     uint32_t executeAtMs = 0;   // earliest time the note may sound (fixed delay)
     bool executeAnchored = false;  // executeAtMs fixed at the Note-On instant
     uint32_t estArriveMs = 0;   // estimated carriage arrival time (finger lead)
     bool fingerPressStarted = false;  // finger descent already begun (lead)
-    uint32_t liftStartMs = 0;   // when the strum lift began lowering
-    bool liftStarted = false;   // strum lift descent already begun (lead)
     uint32_t jogSafeAtMs = 0;   // earliest a manual jog may move (finger lifted)
 };
 
@@ -126,7 +129,8 @@ std::vector<StringSched> g_sched;
 // here; loop() is the SOLE owner of the mechanical state and drains the queue
 // sequentially. Read-only handlers take g_stateMutex so a reallocation in loop()
 // (profile reload, capability rebuild) can never be seen half-done.
-enum class CmdType : uint8_t { Panic, Reset, ActivateProfile, TestNote, TestServo, Jog };
+enum class CmdType : uint8_t { Panic, Reset, ActivateProfile, TestNote, TestServo,
+                               TestMotor, Jog };
 struct AppCommand {
     CmdType type;
     uint32_t id = 0;             // for result tracking (GET /api/commands)
@@ -135,6 +139,9 @@ struct AppCommand {
     uint16_t durationMs = 0;
     int16_t servoIndex = -1;
     bool servoActive = false;
+    int16_t motorIndex = -1;     // TestMotor: which bow motor to spin
+    float motorDuty = 0.0f;      // TestMotor: 0..1 wheel speed (0 = stop)
+    bool motorForward = true;    // TestMotor: rotation direction
     int16_t axisIndex = -1;      // Jog: which axis to nudge
     float jogDeltaMm = 0.0f;     // Jog: signed distance (mm)
 };
@@ -232,6 +239,24 @@ void buildStepperPins(std::vector<AxisPins>& out, int8_t& enablePin) {
     }
 }
 
+// Resolve each bow motor's H-bridge pins (BOWA{n}/BOWB{n}, indexed by the motor's
+// owning string) and the shared enable line (MOTOR_EN) from the pin table. The
+// output arrays are aligned with g_profile.bowMotors.
+void buildBowPins(std::vector<int8_t>& pinsA, std::vector<int8_t>& pinsB,
+                  int8_t& enablePin) {
+    enablePin = -1;
+    pinsA.assign(g_profile.bowMotors.size(), kNoPin);
+    pinsB.assign(g_profile.bowMotors.size(), kNoPin);
+    for (const auto& a : g_profile.pins) {
+        if (a.signal == "MOTOR_EN") { enablePin = a.gpio; continue; }
+        for (size_t i = 0; i < g_profile.bowMotors.size(); ++i) {
+            const std::string idx = std::to_string(g_profile.bowMotors[i].stringIndex + 1);
+            if (a.signal == "BOWA" + idx) pinsA[i] = a.gpio;
+            else if (a.signal == "BOWB" + idx) pinsB[i] = a.gpio;
+        }
+    }
+}
+
 // Reallocates the per-string vectors. The CALLER must hold g_stateMutex around
 // this (and around the g_profile assignment that precedes an activation) so a web
 // read never observes the runtime half-rebuilt. g_stateMutex is only ever held
@@ -255,6 +280,13 @@ void applyProfile() {
     g_steppers.begin(g_profile.strings, axisPins, enablePin, homeActiveHigh,
                      limitActiveHigh);
     g_servos.begin(g_profile.servos, pinOf("SDA"), pinOf("SCL"), pinOf("SERVO_OE"));
+
+    // Bow motors (H-bridge friction wheels): resolve their pins and init the bank
+    // with the motor stage left disabled (MOTOR_EN low) until a note engages.
+    std::vector<int8_t> bowPinsA, bowPinsB;
+    int8_t motorEnPin = -1;
+    buildBowPins(bowPinsA, bowPinsB, motorEnPin);
+    g_bow.begin(g_profile.bowMotors, bowPinsA, bowPinsB, motorEnPin);
 
     g_homing.assign(g_profile.strings.size(), HomingController{});
     g_anchored.assign(g_profile.strings.size(), false);
@@ -313,14 +345,17 @@ void faultRuntimeAxis(size_t i, const char* reason, uint32_t nowMs) {
     if (i >= g_instrument.stringCount()) return;
     g_steppers.emergencyStop(i);
     g_instrument.faultString(i);
-    // Physically release any servo this axis had engaged BEFORE wiping the sched,
-    // so a single-axis fault never leaves the finger clamped or the strum lift
-    // pressed on the string (finger/strum leads can engage them before arrival).
-    // This mirrors the Note Off / note-replacement release paths.
+    // Physically release any actuator this axis had engaged BEFORE wiping the
+    // sched, so a single-axis fault never leaves the finger clamped or the bow
+    // wheel pressed on and spinning. This mirrors the Note Off / note-replacement
+    // release paths.
     if (i < g_sched.size()) {
         int fi = g_servos.fingerIndex(static_cast<int>(i));
         if (fi >= 0) g_servos.release(fi);
-        if (g_sched[i].liftIndex >= 0) g_servos.release(g_sched[i].liftIndex);
+        int bi = g_servos.bowPressIndex(static_cast<int>(i));
+        if (bi >= 0) g_servos.release(bi);            // lift the wheel off the string
+        int mi = g_bow.indexForString(static_cast<int>(i));
+        if (mi >= 0) g_bow.stop(mi);                  // and spin its motor down
         g_sched[i] = StringSched{};
     }
     if (i < g_anchored.size()) g_anchored[i] = false;
@@ -511,6 +546,7 @@ void neutraliseAll() {
     g_steppers.stopAll();
     g_steppers.enableDrivers(false);
     g_servos.neutraliseAll();
+    g_bow.neutraliseAll();   // stop every friction wheel + cut the H-bridge enable
     for (auto& s : g_sched) s = StringSched{};
     g_testOffs.clear();  // drop scheduled test Note Offs so a stale one can't stop
                          // a future note with the same channel/number (audit P1-4)
@@ -549,6 +585,7 @@ bool doActivateProfile(const Profile& p, uint32_t nowMs) {
     g_instrument.panic();
     g_steppers.stopAll();
     g_steppers.enableDrivers(false);
+    g_bow.neutraliseAll();  // stop the wheels before the config is torn down
     for (auto& s : g_sched) s = StringSched{};
     g_testOffs.clear();  // a profile change cancels any pending test Note Offs
     // Immediately demote from Armed to PowerOnSafe and enter Reconfiguring so no
@@ -625,6 +662,21 @@ bool doTestServo(int index, bool active) {
     return true;
 }
 
+// Web bow-motor test: spin one friction wheel at a given duty / direction for
+// bring-up (wiring, rotation direction, rosin grip). Only when actuators are
+// armed and for a real, enabled motor. duty 0 stops it; the web UI is responsible
+// for sending the stop (matching the persistent nature of the servo test).
+bool doTestMotor(int index, double duty, bool forward) {
+    if (!g_safety.actuatorsAllowed()) return false;
+    if (!g_bow.commandable(index)) return false;
+    if (duty < 0.0) duty = 0.0;
+    if (duty > 1.0) duty = 1.0;
+    g_bow.enableAll(true);
+    if (duty <= 0.0) g_bow.stop(index);
+    else g_bow.setSpeed(index, duty, forward);
+    return true;
+}
+
 // Web jog: nudge one axis by a small signed delta (manual bring-up, checking the
 // motor direction, positioning for fret calibration). Only when Ready, actuators
 // armed, the axis homed & not faulted, and idle (no live note) so it can never
@@ -691,6 +743,9 @@ void drainCommands(uint32_t nowMs) {
             case CmdType::TestServo:
                 ok = doTestServo(c->servoIndex, c->servoActive);
                 break;
+            case CmdType::TestMotor:
+                ok = doTestMotor(c->motorIndex, c->motorDuty, c->motorForward);
+                break;
             case CmdType::Jog:
                 ok = doJog(c->axisIndex, c->jogDeltaMm, nowMs);
                 break;
@@ -699,15 +754,6 @@ void drainCommands(uint32_t nowMs) {
         delete c->profile;  // owned copy (null for non-profile commands)
         delete c;
     }
-}
-
-// The per-string striker: the plectrum ('pluck') if present, otherwise the
-// per-string strum servo ('strum'). Both name the same physical per-string
-// striker, so an instrument may wire either one. There is no shared strummer —
-// every string is plucked/strummed on its own.
-int perStringStrikeIndex(size_t i) {
-    int p = g_servos.pluckIndex(static_cast<int>(i));
-    return p >= 0 ? p : g_servos.strumIndex(static_cast<int>(i));
 }
 
 // Per-axis endstop safety scan, run for EVERY axis each tick BEFORE any musical
@@ -735,7 +781,7 @@ bool tickAxisSafety(size_t i, uint32_t nowMs) {
     return false;
 }
 
-// Drive one string's mechanical sequence toward a plucked note.
+// Drive one string's mechanical sequence toward a bowed note.
 void tickString(size_t i, uint32_t nowMs) {
     StringController& sc = g_instrument.string(i);
     const StringTarget& tgt = g_instrument.target(i);
@@ -745,24 +791,27 @@ void tickString(size_t i, uint32_t nowMs) {
         if (sch.phase == StringSched::Idle) return;
         if (sch.phase != StringSched::WaitStopped) {
             // Note released / cancelled: STOP the carriage (a Note Off during a
-            // move must not let it finish travelling), lift the finger, damp.
+            // move must not let it finish travelling), lift the finger, and lift
+            // the bow wheel + spin its motor down — the string stops because the
+            // excitation stops (there is no separate damper).
             g_steppers.stop(i);
             int fi = g_servos.fingerIndex(static_cast<int>(i));
             if (fi >= 0) g_servos.release(fi);
             // A manual jog must not move the carriage until the finger has fully
             // lifted off the string (§16: never drag the finger).
             sch.jogSafeAtMs = nowMs + g_servos.travelMs(fi);
-            if (sch.liftIndex >= 0) { g_servos.release(sch.liftIndex); sch.liftIndex = -1; }
-            sch.liftStarted = false;
-            int di = g_servos.damperIndex(static_cast<int>(i));
-            if (di >= 0) g_servos.strike(di);
+            if (sch.bowIndex >= 0) g_servos.release(sch.bowIndex);  // lift the wheel
+            if (sch.motorIndex >= 0) g_bow.stop(sch.motorIndex);    // spin it down
+            sch.bowEngaged = false;
+            sch.lastIntensity = -1.0;
             sch.phase = StringSched::WaitStopped;
         }
         // Only declare the axis idle once the carriage has REALLY stopped, so a
         // note accepted right after can't issue a moveTo into a still-decelerating
-        // motor (the musical analogue of the homing brake states).
+        // motor (the musical analogue of the homing brake states). The wheel is
+        // already lifted, so the note is silent regardless of the motor spin-down.
         if (!g_steppers.isRunning(i)) {
-            sc.dampingDone();
+            sc.bowReleased();
             sch.phase = StringSched::Idle;
             sch.commandId = 0;
         }
@@ -771,19 +820,21 @@ void tickString(size_t i, uint32_t nowMs) {
 
     if (sch.commandId != tgt.commandId) {
         // New note replacing a previous one on this string (e.g. the allocator's
-        // ReplaceOldest): explicitly damp the still-vibrating string AND wait for
-        // the damper's travel/settle before the carriage moves, so a ringing
-        // string is not dragged to a new fret and re-plucked (audit P1-7).
+        // ReplaceOldest): lift the bow wheel off and spin the motor down, and wait
+        // for the wheel to travel up before the carriage moves, so a sounding
+        // string is not scraped as it is dragged to a new position (audit P1-7).
+        sch.bowIndex = g_servos.bowPressIndex(static_cast<int>(i));
+        sch.motorIndex = g_bow.indexForString(static_cast<int>(i));
         sch.dampUntilMs = nowMs;
         if (sch.phase != StringSched::Idle && sch.phase != StringSched::WaitStopped) {
-            int di = g_servos.damperIndex(static_cast<int>(i));
-            if (di >= 0) {
-                g_servos.strike(di);
-                sch.dampUntilMs = nowMs + g_servos.travelMs(di) + g_servos.settleMs(di);
+            if (sch.bowIndex >= 0) {
+                g_servos.release(sch.bowIndex);  // lift the wheel
+                sch.dampUntilMs = nowMs + g_servos.travelMs(sch.bowIndex);
             }
+            if (sch.motorIndex >= 0) g_bow.stop(sch.motorIndex);
         }
-        // A strum lift engaged for the previous note is raised before anything else.
-        if (sch.liftIndex >= 0) { g_servos.release(sch.liftIndex); sch.liftIndex = -1; }
+        sch.bowEngaged = false;
+        sch.lastIntensity = -1.0;
         // Fixed reception -> sound delay. A directly-played note is received now,
         // so anchor the delay here. A merely-PREPARED (anticipated) note is not
         // "received" until its Note On triggers it, so leave it unanchored and
@@ -791,8 +842,6 @@ void tickString(size_t i, uint32_t nowMs) {
         sch.executeAtMs = nowMs + g_profile.midi.noteExecutionDelayMs;
         sch.executeAnchored = sc.willArmOnSettle();
         sch.fingerPressStarted = false;
-        sch.liftStarted = false;
-        sch.strikeIndex = -1;
         // Lift the finger and WAIT for it to travel up before moving the carriage,
         // so the finger never drags along the string (§16).
         sch.commandId = tgt.commandId;
@@ -881,27 +930,6 @@ void tickString(size_t i, uint32_t nowMs) {
             }
             break;
         case StringSched::Settling: {
-            // Strum lead: begin lowering the strum lift up to strumLeadMs before the
-            // string is Ready, so the strummer is already engaged when the strike
-            // time comes (overlaps the lift travel with the finger settle). Skip it
-            // for a merely-prepared note — it must not rest on (and mute) the string
-            // through the whole pre-trigger window; its lift lowers after trigger.
-            if (!sch.liftStarted && sc.willArmOnSettle() && g_profile.midi.strumLeadMs > 0) {
-                int pi = perStringStrikeIndex(i);
-                int li = pi >= 0 ? g_servos.strumLiftIndex(static_cast<int>(i)) : -1;
-                uint32_t settle = g_servos.settleMs(sch.fingerIndex);
-                if (li >= 0 &&
-                    (nowMs - sch.phaseStartMs) + g_profile.midi.strumLeadMs >= settle) {
-                    if (!g_servos.press(li)) {  // start lowering the lift early
-                        faultRuntimeAxis(i, "strum lift servo write failed", nowMs);
-                        break;
-                    }
-                    sch.liftIndex = li;
-                    sch.strikeIndex = pi;
-                    sch.liftStartMs = nowMs;
-                    sch.liftStarted = true;
-                }
-            }
             if (nowMs - sch.phaseStartMs >= g_servos.settleMs(sch.fingerIndex)) {
                 sc.settled();
                 sch.phase = StringSched::Ready;
@@ -912,85 +940,59 @@ void tickString(size_t i, uint32_t nowMs) {
             // An anticipated note is "received" when its Note On triggers it: the
             // fixed delay must run from that instant, not from prepare time. The
             // arm transitioning true here IS that trigger, so anchor now.
-            if (!sch.executeAnchored && sc.pluckArmed()) {
+            if (!sch.executeAnchored && sc.bowArmed()) {
                 sch.executeAtMs = nowMs + g_profile.midi.noteExecutionDelayMs;
                 sch.executeAnchored = true;
             }
-            if (!sc.pluckArmed()) break;  // not armed (prepared / already plucked)
-            int pi = perStringStrikeIndex(i);
-            // Pre-lower the strum lift DURING the fixed-delay wait so the strike
-            // lands AT executeAtMs even with a lift — this keeps a chord's lift and
-            // no-lift strings synchronised. It begins travel+engageDelay before
-            // executeAtMs; with a zero/short delay it simply starts as soon as ready.
-            if (pi >= 0 && !sch.liftStarted) {
-                int li = g_servos.strumLiftIndex(static_cast<int>(i));
-                if (li >= 0) {
-                    uint32_t liftMs = g_servos.travelMs(li) + g_servos.engageDelayMs(li);
-                    if (static_cast<int32_t>(nowMs - sch.executeAtMs) +
-                            static_cast<int32_t>(liftMs) >= 0) {
-                        if (!g_servos.press(li)) {
-                            faultRuntimeAxis(i, "strum lift servo write failed", nowMs);
-                            break;
-                        }
-                        sch.liftIndex = li;
-                        sch.strikeIndex = pi;
-                        sch.liftStartMs = nowMs;
-                        sch.liftStarted = true;
-                    }
-                }
+            if (!sc.bowArmed()) break;  // not armed (prepared / already bowing)
+            sch.bowIndex = g_servos.bowPressIndex(static_cast<int>(i));
+            sch.motorIndex = g_bow.indexForString(static_cast<int>(i));
+            // Bow lead: pre-lower the wheel to a light contact up to bowLeadMs
+            // before the scheduled start, so it is already touching the string when
+            // the note begins (overlaps the descent travel with the fixed delay).
+            if (sch.bowIndex >= 0 && !sch.bowEngaged && g_profile.midi.bowLeadMs > 0 &&
+                static_cast<int32_t>(nowMs - sch.executeAtMs) +
+                        static_cast<int32_t>(g_profile.midi.bowLeadMs) >= 0) {
+                g_servos.pressTo(sch.bowIndex, 0.0);  // descend to light contact
+                sch.bowEngaged = true;
             }
             // Fixed reception -> sound delay: stay ready but silent until the
-            // scheduled execution time. The mechanics have been preparing (and any
-            // anticipated strum lift has been lowering) during this window.
+            // scheduled execution time (the wheel may already be descending).
             if (static_cast<int32_t>(nowMs - sch.executeAtMs) < 0) break;
-            if (!sc.executePluck(tgt.commandId)) break;
-            // Per-string strike: every string is plucked/strummed on its own — there
-            // is no shared strummer. An optional strum-lift lowers the strum servo
-            // onto the string for the stroke, then raises it.
-            if (pi >= 0) {
-                // Use the lift already lowering (strum lead / pre-lower) if any,
-                // otherwise start it now.
-                int li = sch.liftStarted ? sch.liftIndex
-                                         : g_servos.strumLiftIndex(static_cast<int>(i));
-                if (li >= 0) {
-                    if (!sch.liftStarted) {
-                        if (!g_servos.press(li)) {  // lower / engage the strum servo now
-                            faultRuntimeAxis(i, "strum lift servo write failed", nowMs);
-                            break;
-                        }
-                        sch.liftIndex = li;
-                        sch.strikeIndex = pi;
-                        sch.liftStartMs = nowMs;
-                        sch.liftStarted = true;
-                    }
-                    sch.phase = StringSched::StrumLiftDown;
-                    break;
-                }
-                g_servos.strike(pi, tgt.intensity);
+            if (!sc.startBow(tgt.commandId)) break;
+            // Engage the bow: power the H-bridge stage, press the wheel to the
+            // target pressure and spin the motor to the target bow speed. Continuous
+            // dynamics then track tgt.intensity while Bowing.
+            g_bow.enableAll(true);
+            if (sch.bowIndex >= 0 && !g_servos.pressTo(sch.bowIndex, tgt.intensity)) {
+                faultRuntimeAxis(i, "bow-press servo write failed", nowMs);
+                break;
+            }
+            if (sch.motorIndex >= 0)
+                g_bow.setSpeed(sch.motorIndex,
+                               bowSpeedDuty(g_profile.bowMotors[sch.motorIndex], tgt.intensity),
+                               true);
+            sch.bowEngaged = true;
+            sch.lastIntensity = tgt.intensity;
+            sch.phase = StringSched::Bowing;
+            sch.phaseStartMs = nowMs;
+            break;
+        }
+        case StringSched::Bowing: {
+            // Continuous dynamics — the defining behaviour of a bowed note. While it
+            // sounds, follow live intensity changes (expression, mod wheel,
+            // aftertouch) by updating the bow pressure and speed. Throttled so a
+            // steady note does not spam the PCA/LEDC every tick.
+            if (std::fabs(tgt.intensity - sch.lastIntensity) > 0.01) {
+                if (sch.bowIndex >= 0) g_servos.pressTo(sch.bowIndex, tgt.intensity);
+                if (sch.motorIndex >= 0)
+                    g_bow.setSpeed(sch.motorIndex,
+                                   bowSpeedDuty(g_profile.bowMotors[sch.motorIndex], tgt.intensity),
+                                   true);
+                sch.lastIntensity = tgt.intensity;
             }
             break;
         }
-        case StringSched::StrumLiftDown:
-            // Strum once the lift has lowered the strum servo onto the string
-            // (travel + engage delay from when the descent STARTED — which may have
-            // been anticipated during the settle via strumLeadMs).
-            if (static_cast<int32_t>(nowMs - (sch.liftStartMs +
-                    g_servos.travelMs(sch.liftIndex) +
-                    g_servos.engageDelayMs(sch.liftIndex))) >= 0) {
-                g_servos.strike(sch.strikeIndex, tgt.intensity);
-                sch.phase = StringSched::StrumLiftHold;
-                sch.phaseStartMs = nowMs;
-            }
-            break;
-        case StringSched::StrumLiftHold:
-            // Hold the lift down until the strum stroke has completed, then raise it.
-            if (nowMs - sch.phaseStartMs >= g_servos.travelMs(sch.strikeIndex)) {
-                g_servos.release(sch.liftIndex);  // raise / disengage
-                sch.liftIndex = -1;
-                sch.strikeIndex = -1;
-                sch.phase = StringSched::Ready;
-            }
-            break;
         case StringSched::WaitStopped:
         case StringSched::Idle:
             break;
@@ -1022,7 +1024,7 @@ void setup() {
     // corrupt or malicious stored profile can't drive the pins at boot (§21.1).
     if (!g_storage.load(g_storage.startupSlot(), g_profile) ||
         !ProfileValidator::isActivatable(g_profile)) {
-        g_profile = Profile::makeDefault("Ukulele", 4, {67, 60, 64, 69}, 12);
+        g_profile = Profile::makeDefault("Violin", 4, {55, 62, 69, 76}, 24);
     }
     // Stable per-device SysEx identity from the ESP32 MAC, so two instruments on
     // the same network are distinguishable (set before applyProfile's rebuild).
@@ -1053,6 +1055,7 @@ void setup() {
     ctx.sysex = &g_sysex;
     ctx.steppers = &g_steppers;
     ctx.servos = &g_servos;
+    ctx.bow = &g_bow;
     ctx.net = &g_net;
     ctx.safety = &g_safety;
     ctx.storage = &g_storage;
@@ -1073,6 +1076,13 @@ void setup() {
         AppCommand c{CmdType::TestServo};
         c.servoIndex = static_cast<int16_t>(index);
         c.servoActive = active;
+        return enqueueCommand(c);
+    };
+    ctx.onTestMotor = [](int index, double duty, bool forward) -> uint32_t {
+        AppCommand c{CmdType::TestMotor};
+        c.motorIndex = static_cast<int16_t>(index);
+        c.motorDuty = static_cast<float>(duty);
+        c.motorForward = forward;
         return enqueueCommand(c);
     };
     ctx.onJog = [](int axis, double deltaMm) -> uint32_t {
@@ -1225,9 +1235,10 @@ void loop() {
 
     g_instrument.tick(nowUs);   // flush chord groups
     g_servos.update(nowMs);     // scheduled servo returns / rest cut-off
+    g_bow.update(nowMs);        // ramp each friction wheel toward its target speed
 
     // Runtime PCA9685 health: a board lost AFTER arming (unplugged / brown-out)
-    // means no finger/pluck can act — panic rather than keep "playing" blind.
+    // means no finger/bow-press can act — panic rather than keep "playing" blind.
     static uint32_t lastPcaCheckMs = 0;
     if (g_phase == AppPhase::Ready && nowMs - lastPcaCheckMs >= 500) {
         lastPcaCheckMs = nowMs;

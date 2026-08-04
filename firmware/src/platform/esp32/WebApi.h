@@ -7,6 +7,7 @@
 #include "../../core/configuration/Profile.h"
 #include "../../core/gmb/GmbSysExService.h"
 #include "../../core/instrument/InstrumentController.h"
+#include "BowMotorBank.h"
 #include "Net.h"
 #include "ServoBank.h"
 #include "StepperBank.h"
@@ -28,6 +29,7 @@ struct WebContext {
     GmbSysExService* sysex = nullptr;
     StepperBank* steppers = nullptr;
     ServoBank* servos = nullptr;
+    BowMotorBank* bow = nullptr;
     Net* net = nullptr;
     SafetyManager* safety = nullptr;
     ProfileStorage* storage = nullptr;
@@ -40,6 +42,8 @@ struct WebContext {
     std::function<uint32_t(const Profile&)> onActivateProfile;  // validate + enqueue
     std::function<uint32_t(uint8_t, uint8_t, uint8_t, uint16_t)> onTestNote;  // ch,note,vel,ms
     std::function<uint32_t(int, bool)> onTestServo;  // enqueue a servo pulse (index, active)
+    // enqueue a bow-motor spin test (index, duty 0..1, forward)
+    std::function<uint32_t(int, double, bool)> onTestMotor;
     std::function<uint32_t(int, double)> onJog;      // enqueue an axis jog (axis, deltaMm)
     std::function<std::string(uint32_t)> commandState;  // queued/succeeded/refused/unknown
     std::function<bool()> onFormatStorage;       // deliberate LittleFS reformat

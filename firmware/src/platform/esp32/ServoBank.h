@@ -1,9 +1,9 @@
 // Servo bank supporting PCA9685 (up to four boards) AND direct-GPIO servos,
-// mixable per servo (user requirement: work with or without a PCA). Roles:
-// finger / pluck / strum / strumLift / damper per string, plus a shared damper
-// and aux actuators. There is no shared strummer — strumming is per string.
-// The PCA /OE line is tied to a safety pin so all PCA servos can be neutralised
-// instantly (spec §21.2); direct servos are detached on stop.
+// mixable per servo (user requirement: work with or without a PCA). Roles on a
+// bowed instrument: finger (pitch stop) and bowPress (descent servo that lowers
+// the friction wheel and sets the bow pressure), per string, plus shared aux
+// actuators. The PCA /OE line is tied to a safety pin so all PCA servos can be
+// neutralised instantly (spec §21.2); direct servos are detached on stop.
 #pragma once
 
 #include <cstdint>
@@ -33,16 +33,20 @@ public:
     void toMicros(int index, uint16_t us);
 
     // Non-blocking motion helpers (honour travelMs / settleMs / disableAtRest):
-    //   press  : hold active   (finger down)
-    //   release: return to rest (finger up), then optionally cut PWM at rest
-    //   strike : pulse active then auto-return to rest (pluck / strum / damper)
+    //   press   : hold active   (finger down)
+    //   release : return to rest (finger up / wheel lifted), then optionally cut
+    //             PWM at rest
+    //   pressTo : hold a proportional position between contact and active — the
+    //             bow-press (descent) servo, whose pulse follows the note's
+    //             intensity so the wheel stays engaged at the right pressure.
     // Returns false if the servo could not actually be driven (LEDC re-attach or
     // PCA write failure) so the caller can fault the axis (audit P1-5).
     bool press(int index);
     void release(int index);
-    // intensity 0..1 scales the strike depth between rest and active (velocity).
-    void strike(int index, double intensity = 1.0);
-    // Advance scheduled returns and rest-time PWM cut-off. Call from loop().
+    // intensity 0..1 maps the pulse between contactUs (light) and activeUs (full);
+    // holds there (Mode::Active) until release() lifts the wheel.
+    bool pressTo(int index, double intensity);
+    // Advance scheduled rest-time PWM cut-off. Call from loop().
     void update(uint32_t nowMs);
 
     // Hardware safety: enable/disable all PCA outputs via /OE.
@@ -52,12 +56,9 @@ public:
     // Lookup by role + string (-1 for shared roles). Returns -1 if absent.
     int servoIndex(const std::string& function, int stringIndex) const;
     int fingerIndex(int stringIndex) const { return servoIndex("finger", stringIndex); }
-    int pluckIndex(int stringIndex) const { return servoIndex("pluck", stringIndex); }
-    int strumIndex(int stringIndex) const { return servoIndex("strum", stringIndex); }
-    // Optional per-string lift that lowers (engages) the strum/pluck servo onto
-    // the string for a stroke, then raises (disengages) it: rest = raised.
-    int strumLiftIndex(int stringIndex) const { return servoIndex("strumLift", stringIndex); }
-    int damperIndex(int stringIndex) const { return servoIndex("damper", stringIndex); }
+    // The mandatory descent servo: lowers the friction wheel and sets the bow
+    // pressure for this string.
+    int bowPressIndex(int stringIndex) const { return servoIndex("bowPress", stringIndex); }
 
     // True if any configured direct-GPIO servo failed to attach an LEDC channel.
     bool directAttachFault() const { return directAttachFault_; }
@@ -83,19 +84,17 @@ public:
     uint16_t settleMs(int index) const {
         return (index >= 0 && index < (int)servos_.size()) ? servos_[index].settleMs : 0;
     }
-    // Extra pause after a strum lift is down before the stroke fires (strumLift).
+    // Extra pause after the wheel is down before the bow motor spins up (bowPress).
     uint16_t engageDelayMs(int index) const {
         return (index >= 0 && index < (int)servos_.size()) ? servos_[index].engageDelayMs : 0;
     }
 
 private:
-    enum class Mode : uint8_t { Rest, Active, Striking };
+    enum class Mode : uint8_t { Rest, Active };
     struct Rt {
         Mode mode = Mode::Rest;
-        uint32_t returnAtMs = 0;  // when a strike returns to rest
         uint32_t restAtMs = 0;    // when a resting servo may cut its PWM
         bool pwmOff = false;
-        bool strokeParity = false;  // toggles per strike for alternateDirection
     };
     std::vector<Rt> rt_;
 

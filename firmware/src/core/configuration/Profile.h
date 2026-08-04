@@ -155,7 +155,10 @@ struct BowMotorConfig {
     BowDriveMode driveMode = BowDriveMode::InIn;
     uint32_t pwmFreqHz = 20000;           // 20 kHz — above hearing, quiet drive
     uint8_t pwmResolutionBits = 10;       // LEDC duty resolution (bits)
-    uint8_t minDutyPercent = 0;           // dead-band floor (wheel won't turn below this)
+    // A friction wheel must keep turning to excite the string, so the intensity
+    // maps into [minDutyPercent, maxDutyPercent]: the floor keeps it spinning past
+    // its dead-band even at pianissimo.
+    uint8_t minDutyPercent = 25;
     uint8_t maxDutyPercent = 100;         // bow-speed ceiling
     bool reverse = false;                 // invert the default rotation direction
     bool brakeOnStop = false;             // brake (both inputs high) vs coast on note-off

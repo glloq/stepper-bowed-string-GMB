@@ -194,6 +194,8 @@ void ProfileStorage::toJson(const Profile& p, JsonDocument& doc) {
     in["type"] = p.instrument.type;
     in["gmProgram"] = p.instrument.gmProgram;
     in["typeId"] = p.instrument.typeId;
+    in["subType"] = p.instrument.subType;
+    in["fretless"] = p.instrument.fretless;
     in["capo"] = p.instrument.capo;
     in["transpose"] = p.instrument.transpose;
 
@@ -226,9 +228,10 @@ void ProfileStorage::toJson(const Profile& p, JsonDocument& doc) {
     mi["sustainCc"] = p.midi.sustainCc;
     mi["velocityCurve"] = velocityCurveName(p.midi.velocityCurve);
     mi["saturationStrategy"] = saturationName(p.midi.saturationStrategy);
+    mi["continuousDynamics"] = p.midi.continuousDynamics;
     mi["noteExecutionDelayMs"] = p.midi.noteExecutionDelayMs;
     mi["fingerLeadMs"] = p.midi.fingerLeadMs;
-    mi["strumLeadMs"] = p.midi.strumLeadMs;
+    mi["bowLeadMs"] = p.midi.bowLeadMs;
 
     JsonObject sf = doc["stringFretSelection"].to<JsonObject>();
     sf["enabled"] = p.selector.enabled;
@@ -311,22 +314,35 @@ void ProfileStorage::toJson(const Profile& p, JsonDocument& doc) {
         o["pulseMaxUs"] = s.pulseMaxUs;
         o["restUs"] = s.restUs;
         o["activeUs"] = s.activeUs;
+        o["contactUs"] = s.contactUs;
         o["inverted"] = s.inverted;
         o["travelMs"] = s.travelMs;
         o["settleMs"] = s.settleMs;
         o["disableAtRest"] = s.disableAtRest;
         o["engageDelayMs"] = s.engageDelayMs;
-        o["alternateDirection"] = s.alternateDirection;
-        o["activeAltUs"] = s.activeAltUs;
-        o["strokeMs"] = s.strokeMs;
-        o["minStrikeUs"] = s.minStrikeUs;
+    }
+
+    JsonArray bowMotors = doc["bowMotors"].to<JsonArray>();
+    for (const auto& m : p.bowMotors) {
+        JsonObject o = bowMotors.add<JsonObject>();
+        o["enabled"] = m.enabled;
+        o["stringIndex"] = m.stringIndex;
+        o["driveMode"] = m.driveMode == BowDriveMode::PhaseEnable ? "phaseEnable" : "inIn";
+        o["pwmFreqHz"] = m.pwmFreqHz;
+        o["pwmResolutionBits"] = m.pwmResolutionBits;
+        o["minDutyPercent"] = m.minDutyPercent;
+        o["maxDutyPercent"] = m.maxDutyPercent;
+        o["reverse"] = m.reverse;
+        o["brakeOnStop"] = m.brakeOnStop;
+        o["spinUpMs"] = m.spinUpMs;
+        o["spinDownMs"] = m.spinDownMs;
     }
 }
 
 bool ProfileStorage::fromJson(JsonVariantConst doc, Profile& out) {
     if (doc["instrument"].isNull()) return false;
     bool enumsOk = true;  // set false by any unknown enum string -> reject profile
-    out.project = doc["project"] | "Stepper-Plucked-Strings-GMB";
+    out.project = doc["project"] | "Stepper-Bowed-Strings-GMB";
     out.profileVersion = doc["profileVersion"] | 1;
     out.capabilitiesRevision = doc["capabilitiesRevision"] | 1;
 
@@ -334,9 +350,11 @@ bool ProfileStorage::fromJson(JsonVariantConst doc, Profile& out) {
     out.instrument.name = in["name"] | "Instrument";
     out.instrument.description = in["description"] | "";
     out.instrument.stringCount = in["stringCount"] | 4;
-    out.instrument.type = in["type"] | "guitar";
-    out.instrument.gmProgram = in["gmProgram"] | 24;
-    out.instrument.typeId = in["typeId"] | 4;
+    out.instrument.type = in["type"] | "violin";
+    out.instrument.gmProgram = in["gmProgram"] | 40;
+    out.instrument.typeId = in["typeId"] | 5;
+    out.instrument.subType = in["subType"] | 0;
+    out.instrument.fretless = in["fretless"] | true;
     out.instrument.capo = in["capo"] | 0;
     out.instrument.transpose = in["transpose"] | 0;
 
@@ -362,7 +380,7 @@ bool ProfileStorage::fromJson(JsonVariantConst doc, Profile& out) {
     out.network.mode = nm == "station" ? NetworkMode::Station : NetworkMode::AccessPoint;
     out.network.ssid = net["ssid"] | "";
     out.network.hostname = net["hostname"] | "gmb-instrument";
-    out.network.apSsid = net["apSsid"] | "Stepper-Plucked-Strings-GMB";
+    out.network.apSsid = net["apSsid"] | "Stepper-Bowed-Strings-GMB";
     out.network.staticIp = net["staticIp"] | false;
 
     JsonObjectConst mi = doc["midi"];
@@ -374,9 +392,10 @@ bool ProfileStorage::fromJson(JsonVariantConst doc, Profile& out) {
     out.midi.sustainCc = mi["sustainCc"] | 64;
     out.midi.velocityCurve = velocityCurveFrom(mi["velocityCurve"], &enumsOk);
     out.midi.saturationStrategy = saturationFrom(mi["saturationStrategy"], &enumsOk);
+    out.midi.continuousDynamics = mi["continuousDynamics"] | true;
     out.midi.noteExecutionDelayMs = mi["noteExecutionDelayMs"] | 0;
     out.midi.fingerLeadMs = mi["fingerLeadMs"] | 0;
-    out.midi.strumLeadMs = mi["strumLeadMs"] | 0;
+    out.midi.bowLeadMs = mi["bowLeadMs"] | 0;
 
     JsonObjectConst sf = doc["stringFretSelection"];
     out.selector.enabled = sf["enabled"] | true;
@@ -471,16 +490,31 @@ bool ProfileStorage::fromJson(JsonVariantConst doc, Profile& out) {
         s.pulseMaxUs = o["pulseMaxUs"] | 2500;
         s.restUs = o["restUs"] | 1000;
         s.activeUs = o["activeUs"] | 1800;
+        s.contactUs = o["contactUs"] | 1400;
         s.inverted = o["inverted"] | false;
         s.travelMs = o["travelMs"] | 120;
         s.settleMs = o["settleMs"] | 30;
         s.disableAtRest = o["disableAtRest"] | true;
         s.engageDelayMs = o["engageDelayMs"] | 0;
-        s.alternateDirection = o["alternateDirection"] | false;
-        s.activeAltUs = o["activeAltUs"] | 0;
-        s.strokeMs = o["strokeMs"] | 0;
-        s.minStrikeUs = o["minStrikeUs"] | 0;
         out.servos.push_back(s);
+    }
+
+    out.bowMotors.clear();
+    for (JsonObjectConst o : doc["bowMotors"].as<JsonArrayConst>()) {
+        BowMotorConfig m;
+        m.enabled = o["enabled"] | false;
+        m.stringIndex = o["stringIndex"] | -1;
+        std::string dm = o["driveMode"] | "inIn";
+        m.driveMode = dm == "phaseEnable" ? BowDriveMode::PhaseEnable : BowDriveMode::InIn;
+        m.pwmFreqHz = o["pwmFreqHz"] | 20000;
+        m.pwmResolutionBits = o["pwmResolutionBits"] | 10;
+        m.minDutyPercent = o["minDutyPercent"] | 25;
+        m.maxDutyPercent = o["maxDutyPercent"] | 100;
+        m.reverse = o["reverse"] | false;
+        m.brakeOnStop = o["brakeOnStop"] | false;
+        m.spinUpMs = o["spinUpMs"] | 40;
+        m.spinDownMs = o["spinDownMs"] | 60;
+        out.bowMotors.push_back(m);
     }
     // Reject the whole profile if any enum string was unknown (never silently map
     // an unrecognised value to a default — audit P0-1 / P0-7).

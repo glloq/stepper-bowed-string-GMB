@@ -1,6 +1,6 @@
 #include "ServoBank.h"
 
-#include "../../core/configuration/ServoStroke.h"
+#include "../../core/configuration/BowControl.h"
 
 #if defined(ARDUINO)
 #include <Wire.h>
@@ -182,17 +182,13 @@ void ServoBank::release(int index) {
     rt_[index].restAtMs = 0;
 }
 
-void ServoBank::strike(int index, double intensity) {
-    if (index < 0 || index >= (int)servos_.size()) return;
-    const ServoConfig& s = servos_[index];
-    // Velocity shapes the strike depth; on an alternate stroke the up-stroke
-    // endpoint is used. The maths lives in servoStrikeTargetUs (unit-tested).
-    bool upStroke = s.alternateDirection && rt_[index].strokeParity;
-    writeMicros(index, servoStrikeTargetUs(s, intensity, upStroke));
-    rt_[index].mode = Mode::Striking;
-    rt_[index].returnAtMs = 0;
-    // Flip the stroke direction for the next strike on this servo.
-    if (s.alternateDirection) rt_[index].strokeParity = !rt_[index].strokeParity;
+bool ServoBank::pressTo(int index, double intensity) {
+    if (index < 0 || index >= (int)servos_.size()) return false;
+    // The bow pressure maps the note intensity between contactUs and activeUs; the
+    // wheel holds there (Active) until release() lifts it. Maths in BowControl.h.
+    bool ok = writeMicros(index, bowPressureTargetUs(servos_[index], intensity));
+    rt_[index].mode = Mode::Active;
+    return ok;
 }
 
 void ServoBank::update(uint32_t nowMs) {
@@ -200,17 +196,6 @@ void ServoBank::update(uint32_t nowMs) {
         const ServoConfig& s = servos_[i];
         Rt& r = rt_[i];
         switch (r.mode) {
-            case Mode::Striking:
-                // strokeMs (when set) is how long the stroke stays engaged before
-                // returning; travelMs remains the fallback and the settle base.
-                if (r.returnAtMs == 0)
-                    r.returnAtMs = nowMs + (s.strokeMs ? s.strokeMs : s.travelMs);
-                if ((int32_t)(nowMs - r.returnAtMs) >= 0) {
-                    toRest(static_cast<int>(i));
-                    r.mode = Mode::Rest;
-                    r.restAtMs = nowMs + s.settleMs;
-                }
-                break;
             case Mode::Rest:
                 if (r.restAtMs == 0) r.restAtMs = nowMs + s.settleMs;
                 if (s.disableAtRest && !r.pwmOff && (int32_t)(nowMs - r.restAtMs) >= 0)

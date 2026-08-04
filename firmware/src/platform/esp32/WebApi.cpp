@@ -56,10 +56,9 @@ const char* stringStateName(StringState s) {
         case StringState::Moving:          return "moving";
         case StringState::PressingFinger:  return "pressing";
         case StringState::Settling:        return "settling";
-        case StringState::ReadyToPluck:    return "ready";
-        case StringState::Plucking:        return "plucking";
-        case StringState::Sustaining:      return "sustaining";
-        case StringState::Damping:         return "damping";
+        case StringState::ReadyToBow:      return "ready";
+        case StringState::Bowing:          return "bowing";
+        case StringState::ReleasingBow:    return "releasing-bow";
         case StringState::Cancelling:      return "cancelling";
         case StringState::Fault:           return "fault";
         default:                           return "idle";
@@ -72,14 +71,16 @@ bool fingerDown(StringState s, bool openString) {
     switch (s) {
         case StringState::PressingFinger:
         case StringState::Settling:
-        case StringState::ReadyToPluck:
-        case StringState::Plucking:
-        case StringState::Sustaining:
+        case StringState::ReadyToBow:
+        case StringState::Bowing:
             return true;
         default:
             return false;
     }
 }
+
+// Whether the bow wheel is engaged (down and turning) for this state.
+bool bowEngaged(StringState s) { return s == StringState::Bowing; }
 
 const char* safetyStateName(SafetyState s) {
     switch (s) {
@@ -175,7 +176,13 @@ void WebApi::fillStatus(JsonDocument& doc) {
             s["home"] = ctx_.steppers->homeActive(i);
             s["limit"] = ctx_.steppers->limitActive(i);
             s["finger"] = fingerDown(st, open) ? "down" : "up";
-            s["plectrum"] = (st == StringState::Plucking) ? "strike" : "rest";
+            s["bow"] = bowEngaged(st) ? "on" : "off";
+            double bowSpeed = 0.0;
+            if (ctx_.bow) {
+                int mi = ctx_.bow->indexForString(static_cast<int>(i));
+                if (mi >= 0) bowSpeed = ctx_.bow->dutyOf(mi);
+            }
+            s["bowSpeed"] = bowSpeed;  // current wheel duty 0..1
             s["lastFault"] = (st == StringState::Fault) ? "fault" : "none";
         }
     }
@@ -560,6 +567,33 @@ void WebApi::registerRoutes() {
         });
     testServo->setMethod(HTTP_POST);
     server_->addHandler(testServo);
+
+    // ---- POST /api/test/motor (spin a bow wheel at a duty/direction) ----
+    auto* testMotor = new AsyncCallbackJsonWebHandler(
+        "/api/test/motor", [this](AsyncWebServerRequest* req, JsonVariant& body) {
+            if (!authOk(req)) { JsonDocument d; d["ok"] = false; d["error"] = "unauthorized"; sendJson(req, d, 401); return; }
+            JsonDocument doc;
+            if (!ctx_.safety || !ctx_.safety->actuatorsAllowed()) {
+                doc["ok"] = false;
+                doc["error"] = "actuators not armed";
+                sendJson(req, doc, 409);
+                return;
+            }
+            // Never drive a motor from the async task: enqueue for loop(), which
+            // also rejects an invalid / disabled index. duty 0 stops the wheel.
+            int idx = body["index"] | -1;
+            double duty = body["duty"] | 0.0;
+            bool forward = body["forward"] | true;
+            uint32_t cmdId = ctx_.onTestMotor ? ctx_.onTestMotor(idx, duty, forward) : 0;
+            bool queued = cmdId != 0;
+            doc["ok"] = queued;
+            doc["accepted"] = queued;
+            doc["commandId"] = cmdId;
+            doc["note"] = queued ? "motor test queued" : "command queue full";
+            sendJson(req, doc, queued ? 202 : 503);
+        });
+    testMotor->setMethod(HTTP_POST);
+    server_->addHandler(testMotor);
 
     // ---- POST /api/test/jog (nudge one axis by a delta, Ready only) ----
     auto* testJog = new AsyncCallbackJsonWebHandler(
